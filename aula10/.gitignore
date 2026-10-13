@@ -1,3 +1,7 @@
 # Arquivos gerados ao rodar o exercício (o .env já é ignorado pelo .gitignore da raiz)
 saidas/*
 !saidas/.gitkeep
+
+# Ficha de entrega (.docx): vai para o professor, nao para o repositorio
+Ficha_de_entrega.docx
+~$*.docx

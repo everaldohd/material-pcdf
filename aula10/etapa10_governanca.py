@@ -29,10 +29,8 @@ Runner e a tool NÃO roda. Trate LimiteExcedido em volta do Runner (etapa06_line
 """
 from agents import AgentsException, RunHooks
 
-
 class LimiteExcedido(AgentsException):
     """Levantada pelo hook quando um agente sai do que lhe é permitido."""
-
 
 # 🆕 B.1 -- agente -> conjunto de nomes de tools permitidas.
 #   Os especialistas usam as tools de etapa06_agentes.py; o Coordenador só chama os especialistas (os tool_name das as_tool).
@@ -45,7 +43,6 @@ PERMISSOES: dict[str, set[str]] = {
     "Financeiro": {"tabela_diarias", "consultar_remuneracao", "cotacao_dolar"},
     "Coordenador": {"parecer_normas", "parecer_escala", "parecer_financeiro"},
 }
-
 
 class Governanca(RunHooks):
     def __init__(self, max_tools: int = 6, max_llm: int = 12, verbose: bool = True):
@@ -72,8 +69,6 @@ class Governanca(RunHooks):
         if self.verbose:
             print(f"[governança] {agent.name} -> {tool.name}: OK ({self.tools_chamadas} de {self.max_tools})")
 
-
-
     async def on_llm_start(self, context, agent, system_prompt, input_items) -> None:
         self.chamadas_llm += 1
         # 🆕 B.3 (opcional) -- acima de self.max_llm, levante LimiteExcedido.
@@ -84,8 +79,14 @@ class Governanca(RunHooks):
     async def on_tool_end(self, context, agent, tool, result) -> None:
         # ETAPA 10.1 -- acrescente a self.eventos: {"agente", "tool", "argumentos", "resultado" (truncado)}.
         #   Os argumentos estão em context.tool_arguments (texto JSON) quando a tool é uma function_tool.
-        pass
+        restrita = tool.name == "consultar_remuneracao"
+        self.eventos.append({
+            "agente": agent.name,
+            "tool": tool.name,
+            "argumentos": getattr(context, "tool_arguments", None),
+            "resultado": "[restrito]" if restrita else str(result)[:200],
+        })
 
     async def on_agent_end(self, context, agent, output) -> None:
         # ETAPA 10.1 -- acrescente a self.eventos os tokens até aqui: context.usage.total_tokens
-        pass
+        self.eventos.append({"agente": agent.name, "tokens": context.usage.total_tokens})

@@ -69,6 +69,7 @@ from etapa03_guardrails import LIMIAR, MENSAGENS, encontrar_dado_sensivel, nota_
 from etapa10_observabilidade import medido
 from provedor import configurar
 from etapa06_regras import precisa_chefia, resumo_periodo, violacoes_objetivas
+from etapa10_governanca import Governanca
 
 MODELO = configurar()
 
@@ -211,7 +212,7 @@ def calcular_periodo(estado: Estado) -> dict:
     inicio, fim = pedido["data_inicio"], pedido["data_fim"]
     periodo = resumo_periodo(inicio, fim)
     escala = chamar_mcp("consultar_escala", {"equipe": servidor["equipe"], "inicio": inicio, "fim": fim})
-    return {"periodo": periodo, "escala": escala, "caminho": ["calcular_periodo"]}
+    return {"periodo": periodo, "escala": escala, "fonte_feriados": periodo["fonte_feriados"], "caminho": ["calcular_periodo"]}
 
 # ------------------------------------------------------------------ ETAPA 7.3: paralelismo
 def _fatos(estado: Estado) -> str:
@@ -219,18 +220,22 @@ def _fatos(estado: Estado) -> str:
     return (f"PEDIDO: {estado['pedido']}\nSERVIDOR: {estado['servidor']}\n"
             f"PERÍODO: {estado['periodo']}\nESCALA DA EQUIPE: {estado['escala']}")
 
+def _rodar_agente(agente, entrada: str) -> tuple[str, int]:
+    """Roda um agente com o hook de governança e devolve (texto, tokens gastos)."""
+    resultado = rodar_com_limites_sync(agente, entrada, hooks=Governanca(verbose=False))
+    return resultado.final_output, resultado.context_wrapper.usage.total_tokens
 
 def no_normas(estado: Estado) -> dict:
     # ETAPA 7.3 -- rode agentes.criar_normas() com rodar_com_limites_sync(_fatos(estado)) e escreva SÓ
     #   {"parecer_normas": ..., "caminho": ["normas"]}. Os três especialistas rodam no MESMO passo.
     #   Referência: aula7/exemplos/08_paralelismo/main.py (cada ramo escreve no SEU campo)
-    parecer = rodar_com_limites_sync(agentes.criar_normas(), _fatos(estado)).final_output
-    return {"parecer_normas": parecer, "caminho": ["normas"]}
+    parecer, tokens = _rodar_agente(agentes.criar_normas(), _fatos(estado))
+    return {"parecer_normas": parecer, "tokens": tokens, "caminho": ["normas"]}
 
 def no_escala(estado: Estado) -> dict:
     # ETAPA 7.3 -- idem, agentes.criar_escala() -> {"parecer_escala": ..., "caminho": ["escala"]}
-    parecer = rodar_com_limites_sync(agentes.criar_escala(), _fatos(estado)).final_output
-    return {"parecer_escala": parecer, "caminho": ["escala"]}
+    parecer, tokens = _rodar_agente(agentes.criar_escala(), _fatos(estado))
+    return {"parecer_escala": parecer, "tokens": tokens, "caminho": ["escala"]}
 
 def no_financeiro(estado: Estado) -> dict:
     # ETAPA 7.3 -- idem, agentes.criar_financeiro() -> {"parecer_financeiro": ..., "caminho": ["financeiro"]}
@@ -238,9 +243,9 @@ def no_financeiro(estado: Estado) -> dict:
     pedido = estado["pedido"]
     tem_valor = pedido["tipo"] == "diaria" or (pedido["tipo"] == "ferias" and pedido.get("dias_vendidos", 0) > 0)
     if not tem_valor:  # abono e férias sem venda: nada a calcular, então nem chama o LLM
-        return {"parecer_financeiro": "não se aplica: não há valor a calcular", "caminho": ["financeiro"]}
-    parecer = rodar_com_limites_sync(agentes.criar_financeiro(), _fatos(estado)).final_output
-    return {"parecer_financeiro": parecer, "caminho": ["financeiro"]}
+        return {"parecer_financeiro": "não se aplica: não há valor a calcular", "tokens": 0, "caminho": ["financeiro"]}
+    parecer, tokens = _rodar_agente(agentes.criar_financeiro(), _fatos(estado))
+    return {"parecer_financeiro": parecer, "tokens": tokens, "caminho": ["financeiro"]}
 
 def consolidar(estado: Estado) -> dict:
     # ETAPA 7.3 -- o fan-in: espera os três ramos. Calcule violacoes_objetivas(...) (etapa06_regras.py) e a decisão:
@@ -276,8 +281,8 @@ def redigir_despacho(estado: Estado) -> dict:
     if estado.get("feedback_chefia"):
         entrada += (f"\nA chefia rejeitou o despacho anterior. Motivo: {estado['feedback_chefia']}. "
                     f"Reescreva atendendo a esse motivo.")
-    despacho = rodar_com_limites_sync(agentes.criar_redator(), entrada).final_output
-    return {"despacho": despacho, "caminho": ["redigir_despacho"]}
+    despacho, tokens = _rodar_agente(agentes.criar_redator(), entrada)
+    return {"despacho": despacho, "tokens": tokens, "caminho": ["redigir_despacho"]}
 
 def problemas_do_despacho(despacho: str, pedido: dict) -> list[str]:
     """(PRONTO) O que falta ou sobra no despacho: precisa citar a matrícula, o início do período (AAAA-MM-DD ou

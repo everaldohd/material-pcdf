@@ -358,15 +358,16 @@ def registrar(estado: Estado) -> dict:
     #   os.getenv("TOKEN_REGISTRO", ""), "thread_id": estado["thread_id"], "aprovador": estado.get("aprovador")
     #   ou "sistema"}). Se rejeicoes >= MAX_REJEICOES, decisao = "indeferido_pela_chefia".
     #   Devolva {"protocolo": ..., "resultado": "registrado" ou "negado_pelo_server", "caminho": ["registrar"]}.
-    # ETAPA 9.4 -- ANTES de gravar: encontrar_dado_sensivel(despacho) -> não grava, resultado "bloqueado_na_saida".
     pedido = estado["pedido"]
     protocolo = gerar_protocolo(pedido["matricula"], pedido["tipo"], pedido["data_inicio"], pedido["data_fim"])
     decisao = estado["decisao"]
     if estado.get("rejeicoes", 0) >= MAX_REJEICOES:
         decisao = "indeferido_pela_chefia"
-
+    # ETAPA 9.4 -- ANTES de gravar: encontrar_dado_sensivel(despacho) -> não grava, resultado "bloqueado_na_saida".
     # ETAPA 9.4 -- o guardrail de saída entra aqui, ANTES de gravar.
-
+    if encontrar_dado_sensivel(estado["despacho"]):   # ETAPA 9.4: guardrail de SAÍDA (N10)
+        return {"protocolo": protocolo, "decisao": decisao, "resultado": "bloqueado_na_saida",
+                "caminho": ["registrar"]}
     resposta = chamar_mcp("registrar_decisao", {
         "protocolo": protocolo, "matricula": pedido["matricula"], "tipo": pedido["tipo"],
         "inicio": pedido["data_inicio"], "fim": pedido["data_fim"], "decisao": decisao,

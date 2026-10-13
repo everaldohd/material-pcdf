@@ -1,7 +1,7 @@
 # Entrega: Assistente de Gestão de Pessoas
 
 **Aluno(s):**
-**Até onde chegou:** (X) Marco mínimo (Etapa 6)  ( ) Marco completo (Etapa 9)  ( ) Etapas 10–11
+**Até onde chegou:** (X) Marco mínimo (Etapa 6)  (X) Marco completo (Etapa 9)  ( ) Etapas 10–11
 **Opcionais e bônus feitos:** (X) 🆕 A  (X) 🆕 B  ( ) 🆕 C  ( ) Outro: ______
 
 ## Etapa 0: quem verifica cada regra?
@@ -141,6 +141,18 @@ graph TD;
 - O `print` no começo de `aprovacao_chefia` apareceu quatro vezes no C2, para duas passagens pelo nó: uma ao rodar, duas na retomada com "não" e uma na retomada com "sim". A cada retomada o nó é reexecutado do começo, por isso nada pode ser gravado antes do `interrupt()`.
 - O que faz a pausa sobreviver ao fim do processo: o checkpointer `SqliteSaver`, que grava o estado em `saidas/checkpoints.db` a cada passo, identificado pelo `thread_id`. Cada comando foi um processo Python separado.
 
+## Etapa 9 (segurança, Marco completo): o que eu vi
+
+- Cliente da Etapa 5, de novo: a última linha passou de `sucesso: true` para `{"sem_token": {"sucesso": false, "erro": "token inválido"}}`.
+- C2 aprovado pelo próprio servidor (`sim 1002`): o grafo foi até `registrar` e o resultado foi `negado_pelo_server: autoaprovação (N8)`.
+- C2 aprovado por outra chefia (`sim 1011`): `negado_pelo_server: aprovador não é a chefia 1010 (N8)`.
+- C7 com `--sem-guardrail`: atravessou o grafo, foi de `validar` direto para `registrar` e ficou gravado como `indeferido` (protocolo `56384306`, aprovador `sistema`). O "eu aprovo" não aprovou nada.
+- Auditoria (`saidas/auditoria.jsonl`), seis linhas: `teste001` ALLOW gravado, ALLOW duplicado e DENY token inválido; `b7b6f485` DENY autoaprovação (N8) por 1002 e DENY aprovador não é a chefia 1010 (N8) por 1011; `56384306` ALLOW gravado. O token e o despacho não aparecem em nenhuma.
+- Por que quem nega é o server, e não o agente: o agente é um LLM e pode ser convencido pelo texto do pedido; o server é código e confere o token e a chefia no cadastro. A regra fica num lugar só, por onde toda gravação passa.
+- Se o guardrail de entrada falhar, o que ainda impede uma autoaprovação: as regras objetivas em Python (no C7, indeferimento pela N4) e o server, que compara o aprovador com a chefia do cadastro e nega quando é o próprio servidor.
+- O que não pode aparecer na auditoria: o token, porque quem lesse o log poderia usá-lo para gravar, e o despacho inteiro, que pode trazer dado pessoal.
+- Um erro do modelo que observei: dois despachos do mesmo C2 saíram diferentes, um com a venda certa (R$ 3.166,67) e outro citando uma violação da N2 que não existe e R$ 1.250,00, ainda assim começando por "Pedido deferido". A validação confere matrícula, data e a palavra "deferido", não o valor; a única barreira para isso é a leitura da chefia antes de aprovar.
+
 ## Observabilidade (C2)
 
 - Onde o tempo foi gasto:
@@ -174,6 +186,7 @@ graph TD;
 | `etapa06_agentes.py` e `etapa06_linear.py` | `aula4/ex03_agente_as_tool.py` (Coordenador com especialistas como tools), `aula7/exemplos/02_agentes_especializados/main.py` (uma responsabilidade por agente), `aula7/agentes.py` (`ModelSettings(temperature=0)`) e `aula6/exemplos/01_fluxo_linear/main.py` (fluxo linear) | Cada especialista recebeu só as suas tools e instruções que dizem também o que ele NÃO faz. Por causa do `llama3.1`, as instruções do Coordenador viraram passos numerados com uma tabela de quem consultar por tipo de pedido e um passo final de consolidação das respostas; antes ele consultava só o Normas ou descartava o que recebia. Corrigi o Escala (contava o próprio pedido ou um feriado como afastamento) e o Financeiro (calculava diária em pedido de férias e chamava a tool sem a matrícula). No `analisar()`, a matrícula e a equipe foram para a primeira frase do texto, porque o Coordenador não as repassava. No `processar()`, a decisão e o aprovador vêm do código (`violacoes_objetivas` e `precisa_chefia`), e as datas chegam ao Redator já em DD/MM/AAAA. |
 | `etapa07_grafo.py` (Etapa 7) | `aula6/desafio2/main.py` (LLM + MCP + API + ciclo, o mais parecido), `aula6/exemplos/06_fluxo_condicional/main.py` (roteadores), `aula7/exemplos/08_paralelismo/main.py` (fan-out/fan-in por lista e reducer) e `aula6/exemplos/08_fluxo_ciclico/main.py` (ciclo com parada) | O fluxo linear da Etapa 6 foi cortado em nós, e cada retorno antecipado virou um roteador. O Coordenador deixou de existir: Normas, Escala e Financeiro são nós chamados pelo grafo com os fatos montados pelo código, o que eliminou os erros de repasse do `llama3.1`. O Financeiro só chama o LLM quando há valor a calcular (diária ou venda de dias), para não consultar salário à toa. Licença de saúde e tipo "outro" vão para `pedir_dados`. O `registrar` devolve `registrado`, `duplicado` ou `negado_pelo_server: motivo`. Liguei as arestas da chefia já no `construir()`; o desvio temporário ficou só no `rotear_validacao`. |
 | `etapa07_grafo.py` (Etapa 8) | `aula7/exemplos/07_aprovacao_revisao/main.py` (rejeição com feedback e limite de tentativas, o mais parecido), `aula7/exemplos/06_human_in_the_loop/main.py` (`interrupt()` e `Command(resume=...)`) e `aula7/exemplos/04_persistencia/main.py` (`SqliteSaver`, `get_state`) | A pergunta à chefia leva um resumo com servidor, pedido, os três pareceres e o despacho. O sinal de aprovação é o `feedback_chefia` vazio; numa rejeição sem motivo gravo um texto padrão, senão o roteador leria como aprovação. Duas rejeições vão para `registrar`, que grava `indeferido_pela_chefia`. O `retomar()` olha primeiro onde a execução parou e responde "nada pausado" se não houver pausa, o que cobre a retomada em dobro. |
+| `etapa05_mcp_rh.py` (Etapa 9.2 e 9.3) e `etapa07_grafo.py` (Etapa 9.4) | `aula5/exemplos/10_seguranca/server_seguro.py` (token, enum fechado e auditoria no server, o mais parecido) e `aula8/exemplos/05_guardrail_saida/1_codigo_pronto/main.py` (conferir a saída antes de entregar) | No server, quatro negativas antes de gravar: token, decisão fora do conjunto válido, autoaprovação e aprovador diferente da chefia do cadastro (só em deferimento de férias e diária). Toda negativa passa por uma função `negar()` que audita com DENY e devolve o erro. A auditoria é JSON Lines, uma linha por tentativa, sem o token e sem o despacho. No grafo, o `registrar` usa a mesma regex da entrada no despacho e devolve `bloqueado_na_saida` sem chamar o MCP. |
 | | | |
 
 

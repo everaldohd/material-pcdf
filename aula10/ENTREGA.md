@@ -2,7 +2,7 @@
 
 **Aluno(s):**
 **Até onde chegou:** (X) Marco mínimo (Etapa 6)  ( ) Marco completo (Etapa 9)  ( ) Etapas 10–11
-**Opcionais e bônus feitos:** (X) 🆕 A  ( ) 🆕 B  ( ) 🆕 C  ( ) Outro: ______
+**Opcionais e bônus feitos:** (X) 🆕 A  (X) 🆕 B  ( ) 🆕 C  ( ) Outro: ______
 
 ## Etapa 0: quem verifica cada regra?
 
@@ -122,6 +122,15 @@ graph TD;
 - Diferença entre `as_tool` e handoff: com `as_tool` o Coordenador chama o especialista, recebe a resposta e continua no controle: pode consultar outros e juntar os pareceres num só. No handoff a conversa é transferida e quem responde no fim é o especialista. Aqui é preciso combinar três pareceres, então `as_tool` é o que serve.
 - Quem decide: no C6 o primeiro parecer do Coordenador terminou com "o pedido de férias é aprovado", e o sistema indeferiu, porque a decisão vem de `violacoes_objetivas()` (N5), não do agente. O agente explica; o código decide.
 
+## Etapa 7 (o grafo): o que eu vi
+
+- C1: `receber -> proteger_entrada -> extrair -> identificar_servidor -> calcular_periodo -> escala -> financeiro -> normas -> consolidar -> redigir_despacho -> validar -> registrar`; resultado `registrado`, protocolo `ae788d33`, despacho de deferimento citando a N6.
+- C6: o mesmo caminho; resultado `registrado`, protocolo `6f1b47d7`, despacho de indeferimento pela N5 com sugestão de datas depois do fim das férias da 1006.
+- C3 e C4 param em `recusar` logo depois de `proteger_entrada`; o C5 vai até `extrair` e termina em `pedir_dados`.
+- Ordem dos ramos: escala, financeiro, normas, nos dois casos. Pode variar porque os três nós saem de `calcular_periodo` e rodam no mesmo passo, em paralelo. O que não varia é os três virem antes de `consolidar`, que aparece uma única vez (fan-in por lista).
+- Experimento do reducer (7.1): fiz `normas` e `escala` devolverem também `violacoes`. Com `Annotated[list[str], operator.add]`, as listas foram somadas: `['teste escala', 'teste normas']`. Com `list[str]`, o grafo parou com `InvalidUpdateError: At key 'violacoes': Can receive only one value per step`. Dois nós do mesmo passo não podem escrever num campo sem reducer.
+- O ciclo `redigir_despacho -> validar` não repetiu: passou na primeira tentativa e o `erro_validacao` ficou vazio. Antes de rodar, vi que a validação exige as palavras "deferido" ou "indeferido" e o Redator começava por "Defiro"; troquei para "Pedido deferido/indeferido" e passei as datas já em DD/MM/AAAA.
+
 ## Observabilidade (C2)
 
 - Onde o tempo foi gasto:
@@ -130,7 +139,7 @@ graph TD;
 ## Opcionais (preencha só os que fez)
 
 - 🆕 A: votos e decisão do C9: (None..None, 04-01..04-10 vende=5, 03-25..04-03 vende=5), decisão com divergencia=True; tempo em paralelo 5,4 s, em sequência 5,7 s.
-- 🆕 B: saída do `python etapa06_linear.py --governanca`:
+- 🆕 B: saída do `python etapa06_linear.py --governanca`: no teste (a), `[governança] Coordenador -> consultar_remuneracao: BARRADO (fora da lista do Coordenador)` e `barrado: Coordenador não pode usar consultar_remuneracao`; a linha `[tool] consultar_remuneracao(1002) EXECUTOU` não apareceu, ou seja, o hook barrou antes de a tool rodar. No teste (b), C2 com `max_tools=1`: `Coordenador -> parecer_normas: OK (1 de 1)`, depois `parecer_escala` e `parecer_financeiro` BARRADOS e `barrado: orçamento de tools estourado (2 de 1)`. O `llama3.1` pediu os três especialistas no mesmo turno, então o bloqueio veio no segundo especialista, e não dentro do primeiro como no roteiro.
 - 🆕 C: caminho do C10 com a triagem humana (sim e não):
 
 ## Reflexão (até 3 linhas cada)
@@ -153,6 +162,7 @@ graph TD;
 | `etapa03_guardrails.py` | `aula2/agente_guardrail.py` (classificador com nota de 0 a 1, `LIMIAR` e `@input_guardrail`) e `exercicios_resolvidos/aula4/ex11_guardrails.py` (regex num guardrail, sem LLM) | O exemplo tem um guardrail só; aqui são dois, e o motivo vai no `output_info` (`dado_sensivel:cpf`, `fora_do_escopo`) para o `main` escolher a mensagem. O classificador mede escopo e tentativa de mudar as regras, não tópico proibido, e ganhou uma faixa média para a zona cinzenta (C10 = 0,50). Por causa do `llama3.1`, usei temperatura zero e precisei corrigir dois falsos positivos (C1 e C2 com 0,80): deixei explícito que a nota não mede clareza, pus um exemplo de abono e disse que vender dias faz parte do pedido de férias. |
 | `etapa05_mcp_rh.py` e `etapa05_cliente_mcp.py` | `aula6/desafio2/mcp_unidades.py` (MCP Server que lê um CSV), `aula3/agente_retry3.py` (idempotência) e `aula5/exemplos/04_agente_mcp/agente.py` (`MCPServerStdio` + `mcp_servers`) | As cinco tools de leitura devolvem as consultas prontas de `dados_rh.py`, sempre como um dict, e o trabalho ficou nas docstrings (o que a tool faz, formato das datas, o que volta). A `registrar_decisao` olha se o protocolo já existe antes de gravar e devolve `duplicado` em vez de erro. No agente, usei `sys.executable` no lugar de `"python"`, para o server rodar no `.venv`, e avisei nas instruções o formato AAAA-MM-DD das datas, por causa do `llama3.1`. |
 | `etapa06_agentes.py` e `etapa06_linear.py` | `aula4/ex03_agente_as_tool.py` (Coordenador com especialistas como tools), `aula7/exemplos/02_agentes_especializados/main.py` (uma responsabilidade por agente), `aula7/agentes.py` (`ModelSettings(temperature=0)`) e `aula6/exemplos/01_fluxo_linear/main.py` (fluxo linear) | Cada especialista recebeu só as suas tools e instruções que dizem também o que ele NÃO faz. Por causa do `llama3.1`, as instruções do Coordenador viraram passos numerados com uma tabela de quem consultar por tipo de pedido e um passo final de consolidação das respostas; antes ele consultava só o Normas ou descartava o que recebia. Corrigi o Escala (contava o próprio pedido ou um feriado como afastamento) e o Financeiro (calculava diária em pedido de férias e chamava a tool sem a matrícula). No `analisar()`, a matrícula e a equipe foram para a primeira frase do texto, porque o Coordenador não as repassava. No `processar()`, a decisão e o aprovador vêm do código (`violacoes_objetivas` e `precisa_chefia`), e as datas chegam ao Redator já em DD/MM/AAAA. |
+| `etapa07_grafo.py` (Etapa 7) | `aula6/desafio2/main.py` (LLM + MCP + API + ciclo, o mais parecido), `aula6/exemplos/06_fluxo_condicional/main.py` (roteadores), `aula7/exemplos/08_paralelismo/main.py` (fan-out/fan-in por lista e reducer) e `aula6/exemplos/08_fluxo_ciclico/main.py` (ciclo com parada) | O fluxo linear da Etapa 6 foi cortado em nós, e cada retorno antecipado virou um roteador. O Coordenador deixou de existir: Normas, Escala e Financeiro são nós chamados pelo grafo com os fatos montados pelo código, o que eliminou os erros de repasse do `llama3.1`. O Financeiro só chama o LLM quando há valor a calcular (diária ou venda de dias), para não consultar salário à toa. Licença de saúde e tipo "outro" vão para `pedir_dados`. O `registrar` devolve `registrado`, `duplicado` ou `negado_pelo_server: motivo`. Liguei as arestas da chefia já no `construir()`; o desvio temporário ficou só no `rotear_validacao`. |
 | | | |
 
 

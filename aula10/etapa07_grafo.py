@@ -310,7 +310,7 @@ def rotear_validacao(estado: Estado) -> str:
     if estado.get("erro_validacao") and estado["tentativas"] < MAX_TENTATIVAS:
         return "redigir"
     if precisa_chefia(estado["pedido"], estado.get("violacoes", [])):
-        return "registrar"  # ETAPA 8: trocar por "chefia" quando o nó aprovacao_chefia existir
+        return "chefia"  # ETAPA 8: trocar por "chefia" quando o nó aprovacao_chefia existir
     return "registrar"
 
 # ------------------------------------------------------------------ ETAPA 8: a chefia
@@ -322,13 +322,34 @@ def aprovacao_chefia(estado: Estado) -> dict:
     #   Rejeitado -> {"rejeicoes": +1, "feedback_chefia": motivo, "aprovador": ...}
     #   NADA de gravar antes do interrupt(): na retomada, o nó roda de novo desde o começo.
     #   Referência: aula7/exemplos/07_aprovacao_revisao/main.py
-    raise NotImplementedError("ETAPA 8.2: aprovacao_chefia")
-
+    # print("ANTES do interrupt")  # experimento da ficha: quantas vezes aparece?
+    servidor, pedido = estado["servidor"], estado["pedido"]
+    resposta = interrupt({
+        "pergunta": "Aprova o despacho?",
+        "chefia": servidor["chefia"],
+        "resumo": {
+            "servidor": f"{servidor['nome']} (matrícula {servidor['matricula']}, equipe {servidor['equipe']})",
+            "pedido": f"{pedido['tipo']} de {pedido['data_inicio']} a {pedido['data_fim']}",
+            "parecer_normas": estado.get("parecer_normas"),
+            "parecer_escala": estado.get("parecer_escala"),
+            "parecer_financeiro": estado.get("parecer_financeiro"),
+            "despacho": estado["despacho"],
+        },
+    })
+    if resposta.get("aprovado"):
+        return {"aprovador": resposta.get("aprovador"), "feedback_chefia": "", "caminho": ["aprovacao_chefia"]}
+    return {"rejeicoes": estado.get("rejeicoes", 0) + 1,
+            "feedback_chefia": resposta.get("motivo") or "rejeitado sem motivo informado",
+            "aprovador": resposta.get("aprovador"), "caminho": ["aprovacao_chefia"]}
 
 def rotear_chefia(estado: Estado) -> str:
     # ETAPA 8.3 -- aprovado -> "registrar"; rejeitado e rejeicoes < MAX_REJEICOES -> "redigir";
     #              rejeitado de novo -> "registrar" (com decisao "indeferido_pela_chefia": ajuste no registrar)
-    raise NotImplementedError("ETAPA 8.3: rotear_chefia")
+    if not estado.get("feedback_chefia"):
+        return "registrar"                       # aprovado
+    if estado.get("rejeicoes", 0) < MAX_REJEICOES:
+        return "redigir"                         # rejeitado: o Redator refaz com o motivo
+    return "registrar"                           # rejeitado de novo: grava indeferido_pela_chefia
 
 
 # ------------------------------------------------------------------ ETAPA 7.5 / 9.4: registrar
@@ -466,8 +487,18 @@ def retomar(app, thread_id: str, resposta: str, quem: str) -> None:
     #   saida = app.invoke(Command(resume=valor), config_de(thread_id)); mostrar(app, thread_id, saida)
     #   Nada pausado? Diga isso e não faça nada (e se retomarem duas vezes?).
     #   Referência: aula7/exemplos/06_human_in_the_loop/main.py (retomar)
-    raise NotImplementedError("ETAPA 8.4: retomar")
-
+    proximo = app.get_state(config_de(thread_id)).next
+    depois = resposta.split(":", 1)[1].strip() if ":" in resposta else ""
+    if proximo == ("aprovacao_chefia",):
+        aprovado = resposta.strip().lower() == "sim"
+        valor = {"aprovado": aprovado, "aprovador": quem, "motivo": "" if aprovado else depois}
+    elif proximo == ("triagem_humana",):         # 🆕 C (opcional)
+        valor = {"segue": resposta.strip().lower().startswith("sim"), "orientacao": depois, "quem": quem}
+    else:
+        print(f"[{thread_id}] nada pausado")
+        return
+    saida = app.invoke(Command(resume=valor), config_de(thread_id))
+    mostrar(app, thread_id, saida)
 
 def main() -> None:
     args = [a for a in sys.argv[1:] if a != "--sem-guardrail"]

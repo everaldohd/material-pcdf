@@ -65,8 +65,21 @@ async def perguntar_ao_atendente(pergunta: str) -> str:
     #       devolva (await Runner.run(agente, pergunta)).final_output
     #   Compare com a Etapa 1: o agente perdeu a tool local e ganhou o server inteiro.
     #   Referência: aula5/exemplos/04_agente_mcp/agente.py
-    raise NotImplementedError("ETAPA 5.3: perguntar_ao_atendente")
-
+    async with MCPServerStdio(params={"command": sys.executable, "args": [SERVER]}, name="rh") as servidor:
+        agente = Agent(
+            name="AtendenteRH",
+            instructions=(
+                "Você é um atendente do RH que tira dúvidas de servidores públicos. "
+                "Responda sempre em português, de forma breve e direta. "
+                "Use as ferramentas do servidor rh para responder com dados reais: cadastro do servidor, "
+                "escala e afastamentos de uma equipe, normas e valores de diária. "
+                "Datas vão para as ferramentas no formato AAAA-MM-DD. "
+                "Nunca responda de cabeça o que depende desses dados; se a ferramenta devolver erro, diga isso. "
+                "Você não registra decisões nem consulta salários: não use registrar_decisao nem consultar_remuneracao."
+            ),
+            mcp_servers=[servidor],
+        )
+        return (await Runner.run(agente, pergunta)).final_output
 
 if __name__ == "__main__":
     if "--agente" in sys.argv:

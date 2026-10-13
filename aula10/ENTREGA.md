@@ -47,10 +47,10 @@ Compare **caminho e estado**, não o texto do despacho.
 
 ## Etapa 4 (pronta): o que eu entendi
 
-- Diferença entre a saída online e a offline:
-- Por que a espera do retry dobra a cada tentativa:
-- Por que o protocolo é um hash dos campos (e não um número sequencial):
-- O que aconteceria sem o cache de feriados:
+- Diferença entre a saída online e a offline: offline, a BrasilAPI e a API de câmbio falham 3 vezes cada (`[retry]`); os feriados vêm do arquivo local em 1,5 s (a soma das esperas) e a cotação fica `None`. Online não há retry: feriados da `brasilapi` em 0,1 s e cotação real (5,0165). As contas de datas e o protocolo são iguais. Notei 14 feriados online contra 13 no arquivo: a API traz a segunda de Carnaval (08/02/2027), que a cópia local não tem.
+- Por que a espera do retry dobra a cada tentativa: porque uma falha costuma ser serviço sobrecarregado ou fora do ar por instantes. Esperar 0,5 s e depois 1 s (backoff exponencial) dá tempo de ele se recuperar e evita que os clientes insistam todos ao mesmo tempo e piorem o problema. Com 3 tentativas, o custo máximo é 1,5 s antes de cair no plano B.
+- Por que o protocolo é um hash dos campos (e não um número sequencial): porque o mesmo pedido (matrícula, tipo e datas) gera sempre o mesmo protocolo: C1 e C8 deram `ae788d33`. Assim o server reconhece um pedido repetido e não grava duas vezes (idempotência). Um número sequencial daria um protocolo novo a cada envio e dependeria de um contador guardado em algum lugar.
+- O que aconteceria sem o cache de feriados: `dias_uteis()` pergunta dia por dia se a data é feriado, então um único pedido faria dezenas de chamadas à BrasilAPI. Ficaria lento, arriscaria bloqueio por excesso de requisições e, com a API fora do ar, cada consulta custaria 1,5 s de tentativas antes de usar o arquivo local.
 
 ## Observabilidade (C2)
 

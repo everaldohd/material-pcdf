@@ -60,41 +60,96 @@ def _gravar_registros(registros: dict) -> None:
 # ------------------------------------------------------------------ ETAPA 5.1: leitura
 @mcp.tool()
 def consultar_servidor(matricula: str) -> dict:
-    """TODO ETAPA 5.1: docstring. Cadastro de UM servidor, SEM o salário."""
+    # """TODO ETAPA 5.1: docstring. Cadastro de UM servidor, SEM o salário."""
     # Devolva servidor_publico(matricula) (dados_rh.py): já tira o salário e trata matrícula inexistente.
-    raise NotImplementedError("ETAPA 5.1: consultar_servidor")
+
+    """Consulta o cadastro de UM servidor pela matrícula, sem o salário.
+
+    Use para saber nome, cargo, equipe, saldo de férias, abonos restantes ou quem é a chefia imediata.
+
+    Args:
+        matricula: Matrícula do servidor, 4 dígitos, como texto (ex.: "1002").
+
+    Returns:
+        Dict com matricula, nome, cargo, equipe, saldo_ferias_dias, abonos_restantes e chefia
+        (matrícula da chefia imediata). Se não existir: {"erro": "matrícula não encontrada"}.
+    """
+    return servidor_publico(matricula)
 
 
 @mcp.tool()
 def consultar_escala(equipe: str, inicio: str, fim: str) -> dict:
-    """TODO ETAPA 5.1: docstring. Afastamentos da equipe que se sobrepõem ao período e o limite da regra N5."""
+    # """TODO ETAPA 5.1: docstring. Afastamentos da equipe que se sobrepõem ao período e o limite da regra N5."""
     # Devolva escala_da_equipe(equipe, inicio, fim) (dados_rh.py). Na docstring, diga o formato das datas (AAAA-MM-DD)
     # e o que volta (tamanho da equipe, limite de afastados e os afastamentos que se sobrepõem ao período).
-    raise NotImplementedError("ETAPA 5.1: consultar_escala")
+    """Lista os afastamentos de uma equipe que se sobrepõem a um período e o limite da regra N5.
+
+    Use para saber se alguém da equipe já está afastado (férias, abono) nas datas de um pedido.
+
+    Args:
+        equipe: Nome da equipe como está no cadastro (ex.: "Cartório").
+        inicio: Primeiro dia do período, no formato AAAA-MM-DD (ex.: "2027-07-12").
+        fim: Último dia do período, no formato AAAA-MM-DD (ex.: "2027-07-26").
+
+    Returns:
+        Dict com equipe, tamanho_equipe, limite_afastados (máximo de afastados no mesmo dia: 30% da
+        equipe, mínimo 1) e afastamentos (lista com matricula, inicio, fim e tipo de quem já está
+        afastado no período). Se a equipe não existir: {"erro": ...}.
+    """
+    return escala_da_equipe(equipe, inicio, fim)
 
 
 @mcp.tool()
 def consultar_normas(tema: str) -> dict:
-    """TODO ETAPA 5.1: docstring (diga quais temas existem: férias, prazos, escala, abono, diária, aprovação...)."""
+    # """TODO ETAPA 5.1: docstring (diga quais temas existem: férias, prazos, escala, abono, diária, aprovação...)."""
     # Devolva {"tema": tema, "regras": normas(tema)} (normas() está em dados_rh.py).
     # Por que um dict e não a lista direto? Uma tool MCP que devolve LISTA manda cada item como um conteúdo separado:
     # quem chama não distingue "lista com 1 regra" de "1 dict". Neste server, TODA tool devolve UM dict.
-    raise NotImplementedError("ETAPA 5.1: consultar_normas")
+    """Devolve as regras da norma interna (N1 a N10) sobre um tema.
 
+    Use para explicar ou citar uma regra. Não use para decidir se um pedido viola a regra.
+
+    Args:
+        tema: Um destes temas: "férias", "prazos", "escala", "abono", "diária", "aprovação",
+            "saúde" ou "dados". Acentos e maiúsculas não fazem diferença.
+
+    Returns:
+        Dict com tema e regras (lista de codigo, tema e regra). Tema desconhecido devolve regras vazia.
+    """
+    return {"tema": tema, "regras": normas(tema)}
 
 @mcp.tool()
 def tabela_diarias(tipo_destino: str) -> dict:
-    """TODO ETAPA 5.1: docstring. Moeda e valor da diária para capital, interior ou exterior."""
+    # """TODO ETAPA 5.1: docstring. Moeda e valor da diária para capital, interior ou exterior."""
     # Devolva diaria(tipo_destino) (dados_rh.py).
-    raise NotImplementedError("ETAPA 5.1: tabela_diarias")
+    """Devolve a moeda e o valor de UMA diária para um tipo de destino.
+
+    Args:
+        tipo_destino: "capital", "interior" ou "exterior".
+
+    Returns:
+        Dict com moeda ("BRL" ou "USD") e valor_diaria. O exterior é em USD e precisa ser convertido.
+        Tipo desconhecido: {"erro": ...}.
+    """
+    return diaria(tipo_destino)
 
 
 @mcp.tool()
 def consultar_remuneracao(matricula: str) -> dict:
-    """[RESTRITA] TODO ETAPA 5.1: docstring. Salário-base de um servidor (só o Financeiro deve usar, ver 🆕 B)."""
+    # """[RESTRITA] TODO ETAPA 5.1: docstring. Salário-base de um servidor (só o Financeiro deve usar, ver 🆕 B)."""
     # Devolva remuneracao(matricula) (dados_rh.py).
-    raise NotImplementedError("ETAPA 5.1: consultar_remuneracao")
+    """[RESTRITA] Devolve o salário-base de um servidor. Só o agente Financeiro deve usar.
 
+    Serve apenas para calcular o valor da venda de dias de férias (regra N2). Não use para
+    responder perguntas gerais nem para mostrar o salário a quem pergunta.
+
+    Args:
+        matricula: Matrícula do servidor, 4 dígitos, como texto (ex.: "1002").
+
+    Returns:
+        Dict com matricula e salario_base. Se não existir: {"erro": "matrícula não encontrada"}.
+    """
+    return remuneracao(matricula)
 
 # ------------------------------------------------------------------ ETAPA 5.2 / 9.2 / 9.3: escrita
 def _auditar(protocolo: str, decisao_acesso: str, motivo: str, parametros: dict) -> None:
@@ -109,12 +164,26 @@ def _auditar(protocolo: str, decisao_acesso: str, motivo: str, parametros: dict)
 @mcp.tool()
 def registrar_decisao(protocolo: str, matricula: str, tipo: str, inicio: str, fim: str, decisao: str,
                       aprovador: str, despacho: str, token: str, thread_id: str = "") -> dict:
-    """[ESCRITA -- requer autorização] TODO ETAPA 5.2: docstring.
+    # """[ESCRITA -- requer autorização] TODO ETAPA 5.2: docstring.
+    """[ESCRITA -- requer autorização] Grava a decisão final de um pedido. Idempotente pelo protocolo.
+
+    Se o protocolo já tiver sido gravado, nada é gravado de novo e a resposta vem com "duplicado": true.
 
     Args:
         protocolo: protocolo idempotente do pedido (ferramentas.gerar_protocolo).
-        ...: TODO descreva os demais.
+        matricula: matrícula do servidor que fez o pedido (4 dígitos, como texto).
+        tipo: tipo do pedido: "ferias", "abono" ou "diaria".
+        inicio: primeiro dia do período, no formato AAAA-MM-DD.
+        fim: último dia do período, no formato AAAA-MM-DD.
+        decisao: "deferido", "indeferido" ou "indeferido_pela_chefia".
+        aprovador: matrícula de quem aprovou (a chefia imediata), ou "sistema" quando a norma decide sozinha.
+        despacho: texto do despacho, sem CPF nem dado de saúde.
         token: token de registro. Sem ele, a gravação é negada.
+        thread_id: identificador da execução no grafo, usado na auditoria.
+
+    Returns:
+        {"sucesso": True, "protocolo": ...} quando grava; com "duplicado": True se o protocolo já existia;
+        {"sucesso": False, "erro": ...} quando a gravação é negada.
     """
     parametros = {"matricula": matricula, "tipo": tipo, "inicio": inicio, "fim": fim, "decisao": decisao,
                   "aprovador": aprovador, "thread_id": thread_id}
@@ -131,7 +200,15 @@ def registrar_decisao(protocolo: str, matricula: str, tipo: str, inicio: str, fi
     #   Protocolo já existe -> NÃO grave de novo; devolva {"sucesso": True, "duplicado": True, ...}.
     #   Senão grave {**parametros, "despacho": despacho, "registrado_em": ...} e devolva {"sucesso": True, ...}.
     #   Audite com ALLOW (9.3).
-    raise NotImplementedError("ETAPA 5.2: registrar_decisao")
+    registros = _ler_registros()
+    if protocolo in registros:
+        _auditar(protocolo, "ALLOW", "protocolo já registrado (duplicado)", parametros)
+        return {"sucesso": True, "duplicado": True, "protocolo": protocolo}
+
+    registros[protocolo] = {**parametros, "despacho": despacho, "registrado_em": datetime.now().isoformat()}
+    _gravar_registros(registros)
+    _auditar(protocolo, "ALLOW", "registrado", parametros)
+    return {"sucesso": True, "protocolo": protocolo}
 
 
 if __name__ == "__main__":

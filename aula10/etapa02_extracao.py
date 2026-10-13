@@ -32,7 +32,7 @@ import time
 from collections import Counter
 from enum import Enum
 
-from agents import Agent, Runner
+from agents import Agent, ModelSettings, Runner
 from pydantic import BaseModel, Field
 
 from dados.casos import CASOS
@@ -70,34 +70,72 @@ class Pedido(BaseModel):
     tipo: TipoPedido = Field(description=(
         "Tipo do pedido: 'ferias' (descanso anual, pode incluir venda de dias), 'abono' (folga de 1 dia útil), "
         "'diaria' (viagem a serviço), 'licenca_saude' (afastamento por doença) ou 'outro'."))
-
+    matricula: str | None = Field(default=None, description=(
+        "Matrícula do servidor: exatamente 4 dígitos, como texto (ex.: '1002'). "
+        "null se o servidor não informou a matrícula."))
+    data_inicio: str | None = Field(default=None, description=(
+        "Primeiro dia do período pedido, no formato AAAA-MM-DD. "
+        "null se o servidor não disse o dia exato (ex.: 'em agosto', 'perto da Páscoa')."))
+    data_fim: str | None = Field(default=None, description=(
+        "Último dia do período, no formato AAAA-MM-DD. No abono (1 dia), é igual à data_inicio. "
+        "null se o servidor não disse o dia exato."))
+    dias_vendidos: int = Field(default=0, ge=0, le=10, description=(
+        "Dias de férias que o servidor quer VENDER (abono pecuniário, regra N2), de 0 a 10. "
+        "Use 0 se ele não pediu explicitamente para vender."))
+    destino: str | None = Field(default=None, description=(
+        "Só para diária: a cidade de destino da viagem (ex.: 'Buenos Aires'). null nos outros tipos."))
+    tipo_destino: TipoDestino | None = Field(default=None, description=(
+        "Só para diária: 'capital' (capital de estado brasileiro), 'interior' (outra cidade do Brasil) "
+        "ou 'exterior' (fora do Brasil). null nos outros tipos."))
+    justificativa: str = Field(description=(
+        "Resumo curto do motivo do pedido, em uma frase. Nunca inclua CID, diagnóstico ou dado de saúde."))
 
 def criar_extrator(instrucoes: str, input_guardrails: list | None = None) -> Agent:
     # ETAPA 2.2 -- devolva Agent(name="Extrator", instructions=instrucoes, output_type=Pedido,
     #   input_guardrails=input_guardrails or [])
     #   (os guardrails só entram na Etapa 3; até lá, a lista fica vazia)
-    raise NotImplementedError("ETAPA 2.2: criar_extrator")
+    return Agent(name="Extrator", instructions=instrucoes, output_type=Pedido,
+                 input_guardrails=input_guardrails or [],
+                 model_settings=ModelSettings(temperature=0))
 
 
 INSTRUCOES_EXTRATOR = (
     f"Hoje é {texto_hoje()}. "  # (PRONTO) a data real: o modelo não tem relógio (aula3/agente_retry.py)
     "Você extrai pedidos de servidores para o RH (férias, abono ou diária). "
-    "TODO ETAPA 2.2: complete -- datas no formato AAAA-MM-DD, não invente o que não foi dito (use null), "
-    "dias vendidos só se o servidor pedir explicitamente."
+    "Datas sempre no formato AAAA-MM-DD. "
+    "Não invente o que não foi dito: se faltar a matrícula ou o dia exato, use null. "
+    "dias_vendidos só é maior que 0 se o servidor pedir explicitamente para vender dias. "
+    "A matrícula é o número de 4 dígitos que o servidor informa: copie sempre que aparecer. "
+    "Mantenha o ano que o servidor escreveu; nunca troque o ano. "
+    "Mês ou época sem dia ('em agosto', 'perto da Páscoa') NÃO é data exata: data_inicio e data_fim ficam null. "
+    "Viagem a serviço é sempre tipo 'diaria', e 'de X a Y' são as datas de início e fim. "
+    "Cidade fora do Brasil é tipo_destino 'exterior'. "
+    "No abono, data_inicio e data_fim são o mesmo dia e dias_vendidos é 0."
 )
 
 
 def extrair(texto: str) -> Pedido:
     # ETAPA 2.3 -- rode criar_extrator(INSTRUCOES_EXTRATOR) com Runner.run_sync e devolva final_output
     #   (é um objeto Pedido, não texto!)
-    raise NotImplementedError("ETAPA 2.3: extrair")
+    return Runner.run_sync(criar_extrator(INSTRUCOES_EXTRATOR), texto).final_output
 
-
-# ------------------------------------------------------------------ 🆕 A: votação (OPCIONAL, bônus)
-# Para ligar no grafo depois de pronto: USAR_VOTACAO = True em etapa07_grafo.py.
-# 🆕 A.1 -- três instruções LIGEIRAMENTE diferentes para a MESMA tarefa (comece cada uma com f"Hoje é {texto_hoje()}. ")
-#   ex.: um extrator literal; um que confere as datas contra o calendário; um que "pensa como o RH".
-INSTRUCOES_VOTANTES: list[str] = []  # TODO 🆕 A.1: preencha com 3 strings
+_COMUM = (
+    "Você extrai pedidos de servidores para o RH (férias, abono ou diária). "
+    "Datas sempre no formato AAAA-MM-DD. No abono, data_fim é igual a data_inicio. "
+    "destino e tipo_destino só existem em pedido de diária. "
+)
+INSTRUCOES_VOTANTES: list[str] = [
+    f"Hoje é {texto_hoje()}. " + _COMUM +
+    "Seja LITERAL: registre só o que está escrito com todas as letras. Sem dia exato, as datas são null; "
+    "sem um número explícito de dias a vender, dias_vendidos é 0.",
+    f"Hoje é {texto_hoje()}. " + _COMUM +
+    "Confira as datas contra o CALENDÁRIO. Se o servidor der uma referência de calendário e uma duração "
+    "(ex.: 'dez dias perto da Páscoa'), calcule o período mais provável começando numa segunda-feira. "
+    "dias_vendidos só com número explícito.",
+    f"Hoje é {texto_hoje()}. " + _COMUM +
+    "Pense como um ANALISTA DO RH: interprete a intenção do servidor e proponha o período e a venda de dias "
+    "que melhor atendem ao que ele descreveu, mesmo quando o pedido é vago.",
+]
 
 
 async def extrair_com_votacao(texto: str) -> tuple[Pedido, bool, list[Pedido]]:
@@ -105,8 +143,11 @@ async def extrair_com_votacao(texto: str) -> tuple[Pedido, bool, list[Pedido]]:
     #     resultados = await asyncio.gather(*(Runner.run(e, texto) for e in extratores))
     #   depois chame votar([r.final_output for r in resultados]) e devolva (pedido_final, divergencia, votos).
     #   Conceito: aula7/exemplos/08_paralelismo/main.py (fan-out/fan-in), aqui em asyncio, sem grafo.
-    raise NotImplementedError("🆕 A.2: extrair_com_votacao")
-
+    extratores = [criar_extrator(instrucoes) for instrucoes in INSTRUCOES_VOTANTES]
+    resultados = await asyncio.gather(*(Runner.run(e, texto) for e in extratores))
+    votos = [r.final_output for r in resultados]
+    pedido, divergencia = votar(votos)
+    return pedido, divergencia, votos
 
 def votar(votos: list[Pedido]) -> tuple[Pedido, bool]:
     """(PRONTO) Maioria por campo. Sem maioria (2 de 3) em `tipo` ou nas datas -> divergencia=True: o sistema vai

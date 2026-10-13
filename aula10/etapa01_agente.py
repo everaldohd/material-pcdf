@@ -35,8 +35,21 @@ MODELO = configurar()  # LLM REAL: PROVEDOR no .env (openai ou ollama)
 #   Referência: exercicios_resolvidos/aula4/ex10_function_tool.py (consultar_protocolo)
 @function_tool
 def consultar_servidor(matricula: str) -> str:
-    """TODO: escreva a docstring (o que a tool faz e o que é o argumento)."""
-    raise NotImplementedError("ETAPA 1.1: consultar_servidor")
+    """Consulta os dados funcionais de um servidor pela matrícula.
+
+    Use para perguntas sobre uma pessoa específica: nome, cargo, equipe, saldo de
+    férias, abonos restantes ou chefia. Não use para dúvidas gerais sobre férias,
+    abono ou diária.
+
+    Args:
+        matricula: Matrícula com apenas dígitos, por exemplo, "1002".
+
+    Returns:
+        Dados do servidor em JSON, sem salário. Se não encontrado, retorna
+        {"erro": "matrícula não encontrada"}.
+    """
+    print("[tool] consultar_servidor", matricula)
+    return json.dumps(servidor_publico(matricula), ensure_ascii=False)
 
 
 def criar_atendente() -> Agent:
@@ -45,7 +58,20 @@ def criar_atendente() -> Agent:
     #   Instruções: atende servidores, responde em português e de forma breve, usa a tool quando a pergunta
     #   for sobre os dados de UM servidor, e não inventa saldo de cabeça.
     #   Referência: aula1/segundo_agente.py
-    raise NotImplementedError("ETAPA 1.2: criar_atendente")
+    return Agent(
+        name="AtendenteRH",
+    instructions=(
+        "Você é um atendente do RH que tira dúvidas de servidores públicos. "
+        "Responda sempre em português, de forma breve e direta. "
+        "Perguntas gerais sobre conceitos ou regras (o que é férias, abono, abono pecuniário, diária) "
+        "você responde diretamente com o seu conhecimento, sem chamar nenhuma tool e sem pedir matrícula. "
+        "Só quando a pergunta for sobre os dados de UM servidor específico (saldo de férias, abonos "
+        "restantes, equipe, cargo ou chefia), chame a tool consultar_servidor com a matrícula e responda "
+        "só com o que ela devolver. Nesse caso, se faltar a matrícula, peça; se a tool devolver erro, "
+        "diga que não encontrou. Nunca informe dados de um servidor de cabeça."
+    ),
+        tools=[consultar_servidor],
+    )
 
 
 def main() -> None:
@@ -53,7 +79,15 @@ def main() -> None:
     #   1) "Quantos dias de férias a matrícula 1002 ainda tem?"   (precisa da tool)
     #   2) "O que é abono pecuniário?"                            (não precisa)
     #   Referência: aula8/exemplos/02_agente_tool/main.py
-    raise NotImplementedError("ETAPA 1.3: main")
+    atendente = criar_atendente()
+    perguntas = [
+        "Quantos dias de férias a matrícula 1002 ainda tem?",  # precisa da tool
+        "O que é abono pecuniário?",                           # não precisa
+    ]
+    for pergunta in perguntas:
+        print(f"\n[usuário] {pergunta}")
+        resultado = Runner.run_sync(atendente, pergunta)
+        print(f"[resposta] {resultado.final_output}")
 
 
 if __name__ == "__main__":

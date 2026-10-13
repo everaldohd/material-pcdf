@@ -2,22 +2,23 @@
 
 **Aluno(s):**
 **Até onde chegou:** ( ) Marco mínimo (Etapa 6)  ( ) Marco completo (Etapa 9)  ( ) Etapas 10–11
-**Opcionais e bônus feitos:** ( ) 🆕 A  ( ) 🆕 B  ( ) 🆕 C  ( ) Outro: ______
+**Opcionais e bônus feitos:** (X) 🆕 A  ( ) 🆕 B  ( ) 🆕 C  ( ) Outro: ______
 
 ## Etapa 0: quem verifica cada regra?
 
 | Regra | Tema | Quem verifica (função Python / agente / humano) | Por quê | Onde foi implementada (preencha na Etapa 11) |
 |---|---|---|---|---|
-| N1 | férias | | | |
-| N2 | férias | | | |
-| N3 | férias | | | |
-| N4 | prazos | | | |
-| N5 | escala | | | |
-| N6 | abono | | | |
-| N7 | diária | | | |
-| N8 | aprovação | | | |
-| N9 | saúde | | | |
-| N10 | dados | | | |
+| N1 | férias | função Python | É comparação de números | |
+| N2 | férias | função Python | É cálculo matemático simples | |
+| N3 | férias | função Python | É apenas uma consulta no calendário | |
+| N4 | prazos | função Python | É cálculo matemático simples | |
+| N5 | escala | função Python | É cálculo matemático simples | |
+| N6 | abono | função Python | Verificações objeticas | |
+| N7 | diária | função Python | É cálculo matemático simples; o agente Financeiro só explica | |
+| N8 | aprovação | humano | É decisão da chefia; o código apenas decide se o pedido precisa da aprovação da chefia e impede autoaprovação | |
+| N9 | saúde | função Python (guardrail) + agente | A regex de CID barra o dado de saúde antes de qualquer agente ler o texto. Quando o servidor pede licença de saúde sem citar CID, é preciso interpretar o texto: o agente reconhece o pedido e orienta a procurar a junta médica. | |
+| N10 | dados | função Python (guardrail de saída) | Regex de CPF e CID no despacho antes de gravar: é determinística e, se errar, erra para o lado seguro. Limitação: informação de saúde sem código não tem padrão e a regex não pega.| |
+
 
 ## Etapa 11: os 12 casos
 
@@ -58,7 +59,7 @@ Compare **caminho e estado**, não o texto do despacho.
 
 ## Opcionais (preencha só os que fez)
 
-- 🆕 A: votos e decisão do C9: ___ ; tempo dos 3 extratores em paralelo ___ s, em sequência ___ s
+- 🆕 A: votos e decisão do C9: (None..None, 04-01..04-10 vende=5, 03-25..04-03 vende=5), decisão com divergencia=True; tempo em paralelo 5,4 s, em sequência 5,7 s.
 - 🆕 B: saída do `python etapa06_linear.py --governanca`:
 - 🆕 C: caminho do C10 com a triagem humana (sim e não):
 
@@ -77,18 +78,8 @@ Compare **caminho e estado**, não o texto do despacho.
 
 | Arquivo / trecho | Exemplo das aulas em que me baseei | O que precisei adaptar |
 |---|---|---|
+| `etapa01_agente.py` | `ex10_function_tool.py` da aula 4 (tool que consulta tabela), `aula1/segundo_agente.py` (agente com tool) e `aula8/exemplos/02_agente_tool/main.py` (laço com duas perguntas) | A tool usa `servidor_publico()` em vez de um dicionário fixo e não devolve o salário. A docstring e as instruções dizem quando usar e quando não usar a tool, porque o exemplo da aula 1 manda usar sempre. O `print` dentro da tool substitui a leitura de `new_items` para mostrar quando ela roda. |
+| `etapa02_extracao.py` | `aula2/agente_output2.py` (modelo Pydantic com Enum e `Field(description=...)`); para o 🆕 A, `aula7/exemplos/08_paralelismo/main.py` (fan-out/fan-in) e `aula3/agente_parada3.py` (`Runner.run` com `asyncio`) | O modelo passou de ocorrência policial para pedido de RH, com campos opcionais que ficam `null` quando o servidor não informa. Por causa do `llama3.1`, usei temperatura zero no extrator, instruções mais explícitas (matrícula, ano, data sem dia exato, diária no exterior) e mantive o `tipo` como primeiro campo, para o modelo decidir o tipo antes de preencher o resto. No 🆕 A, o paralelismo da aula 7 roda tarefas diferentes dentro de um grafo; aqui são três extratores da mesma tarefa em `asyncio.gather`, com instruções diferentes só no tratamento de pedido vago, e a votação pronta decide. |
 | | | |
 
 
-| Regra | Tema | Quem verifica (função Python / agente / humano) | Por quê | Onde foi implementada (preencha na Etapa 11) |
-|---|---|---|---|---|
-| N1 | férias | função Python | conta: dias corridos >= 5 e <= saldo | |
-| N2 | férias | função Python | conta: dias + vendidos <= saldo, vendidos <= 10 | |
-| N3 | férias | função Python | consulta de calendário (feriados e fim de semana) | |
-| N4 | prazos | função Python | diferença entre datas (dias corridos ou úteis) | |
-| N5 | escala | função Python | contagem de afastados da equipe no período x limite de 30% | |
-| N6 | abono | função Python | dia útil e saldo de abonos | |
-| N7 | diária | função Python | conta (diárias + meia diária, câmbio); o agente Financeiro só explica | |
-| N8 | aprovação | humano | é decisão da chefia; o server só confere se o aprovador é a chefia certa | |
-| N9 | saúde | função Python (guardrail) | regex de CID/CPF barra antes de qualquer agente ver o texto; o classificador (agente) cobre o que a regex não pega | |
-| N10 | dados | função Python (guardrail de saída) | regex no despacho antes de gravar | |

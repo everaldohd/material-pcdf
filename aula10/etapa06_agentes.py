@@ -65,13 +65,45 @@ def criar_normas() -> Agent:
     # ETAPA 6.1 -- Agent(name="Normas", instructions=..., tools=[consultar_normas], model_settings=CONFIG)
     #   Responsabilidade: dizer QUAIS regras se aplicam ao pedido e explicá-las em linguagem simples.
     #   NÃO calcula valores, NÃO consulta a escala. Recebe também as violações objetivas (etapa06_regras.py) para explicá-las.
-    raise NotImplementedError("ETAPA 6.1: criar_normas")
-
+    return Agent(
+        name="Normas",
+        instructions=(
+            "Você é o especialista em NORMAS do RH. Recebe os dados de um pedido (tipo, datas, dias vendidos) "
+            "e, quando houver, as violações objetivas já apuradas pelo sistema. "
+            "Use a tool consultar_normas com o tema do pedido ('férias', 'abono' ou 'diária') e, se precisar, "
+            "também 'prazos', 'escala' e 'aprovação'. "
+            "Diga QUAIS regras se aplicam, citando o código (N1 a N10), e explique cada uma em linguagem simples. "
+            "Se vierem violações, explique o que cada uma significa; não acrescente nem retire violações: "
+            "quem decide se violou é o sistema. "
+            "Use os dados que recebeu: se dias vendidos for maior que 0, a N2 se aplica; se houver período "
+            "com datas, a N1, a N3 e a N4 se aplicam. Não diga que falta informação que está no pedido. "
+            "Você NÃO calcula valores e NÃO consulta a escala. Responda em português, de forma breve."
+        ),
+        tools=[consultar_normas],
+        model_settings=CONFIG,
+    )
 
 def criar_escala() -> Agent:
     # ETAPA 6.1 -- tools=[consultar_escala]. Confere a N5 e, se houver conflito, SUGERE outro período
     #   (com o mesmo número de dias, começando num dia permitido).
-    raise NotImplementedError("ETAPA 6.1: criar_escala")
+    return Agent(
+        name="Escala",
+        instructions=(
+            "Você é o especialista em ESCALA do RH. Recebe a equipe do servidor e o período do pedido. "
+            "Use a tool consultar_escala com a equipe e as datas no formato AAAA-MM-DD. "
+            "O pedido que você está analisando ainda NÃO é um afastamento: não conte o próprio servidor. "
+            "Só existe conflito se a lista 'afastamentos' devolvida pela tool tiver OUTROS servidores em "
+            "quantidade igual ou maior que 'limite_afastados' (regra N5). Lista vazia significa SEM conflito. "
+            "Havendo conflito, diga quem está afastado e até quando. "
+            "limite, há conflito. Diga quem está afastado e até quando. "
+            "Havendo conflito, SUGIRA outro período com o mesmo número de dias, começando depois do fim do "
+            "afastamento que conflita e numa segunda, terça ou quarta-feira que não seja véspera de feriado. "
+            "Sem conflito, diga apenas que a escala permite. "
+            "Você NÃO explica outras regras e NÃO calcula valores. Responda em português, de forma breve."
+        ),
+        tools=[consultar_escala],
+        model_settings=CONFIG,
+    )
 
 
 def criar_financeiro() -> Agent:
@@ -79,14 +111,48 @@ def criar_financeiro() -> Agent:
     #   Venda de férias (N2): dias_vendidos x salario_base / 30. Diárias (N7): uma por pernoite + meia no retorno;
     #   no exterior, em USD convertido pela cotação. Mostre a conta. Câmbio indisponível -> "a calcular".
     #   É o ÚNICO agente que vê o salário.
-    raise NotImplementedError("ETAPA 6.1: criar_financeiro")
+    return Agent(
+        name="Financeiro",
+        instructions=(
+            "Você é o especialista FINANCEIRO do RH. Calcula valores e sempre mostra a conta. "
+            "Calcule SÓ o que o tipo do pedido pede: em férias, apenas a venda de dias (e só se dias vendidos "
+            "A matrícula é o número de 4 dígitos que vem no pedido (ex.: 1002): passe esse número à tool. "
+            "Se o pedido não trouxer a matrícula, não chame a tool: responda 'matrícula não informada'. "
+            "for maior que 0); em diária, apenas as diárias. Nunca calcule diária em pedido de férias. "
+            "VENDA DE FÉRIAS (regra N2): use consultar_remuneracao com a matrícula e calcule "
+            "dias_vendidos x salario_base / 30. Ex.: 5 dias com salário 6000 = 5 x 6000 / 30 = R$ 1.000,00. "
+            "DIÁRIAS (regra N7): uma diária por pernoite mais meia diária no dia do retorno. Os pernoites são "
+            "os dias entre a data de início e a de fim. Ex.: de 03/05 a 05/05 são 2 pernoites: 2,5 diárias. "
+            "Use tabela_diarias com o tipo de destino para saber a moeda e o valor de uma diária. "
+            "Se a moeda for USD, use cotacao_dolar e converta para reais; se a cotação vier 'indisponível', "
+            "informe o total em USD e escreva que o valor em reais está 'a calcular'. Nunca invente o câmbio. "
+            "Abono (folga de 1 dia) não tem valor a calcular: diga isso. "
+            "Você NÃO explica regras e NÃO consulta a escala. Responda em português, de forma breve."
+
+        ),
+        tools=[tabela_diarias, consultar_remuneracao, cotacao_dolar],
+        model_settings=CONFIG,
+    )
 
 
 def criar_redator() -> Agent:
     # ETAPA 6.1 -- sem tools. Escreve o DESPACHO (deferimento ou indeferimento) usando SÓ os fatos recebidos:
     #   matrícula, período, decisão, regras citadas, valores e, no indeferimento, a sugestão de datas.
     #   Nunca escreve CPF nem dado de saúde (N10). Se receber um feedback (da validação ou da chefia), corrige.
-    raise NotImplementedError("ETAPA 6.1: criar_redator")
+    return Agent(
+        name="Redator",
+        instructions=(
+            "Você redige o DESPACHO do RH sobre um pedido de férias, abono ou diária. "
+            "Use SOMENTE os fatos que receber: matrícula, tipo, período, decisão, regras citadas, valores e, "
+            "no indeferimento, a sugestão de datas. Não invente fatos, datas nem valores. "
+            "Comece por 'Defiro' ou 'Indefiro', conforme a decisão recebida. Cite a matrícula, o período com as "
+            "datas no formato DD/MM/AAAA e as regras pelo código. No indeferimento, diga o motivo e a sugestão. "
+            "Nunca escreva CPF, CID nem qualquer dado de saúde. "
+            "Se receber um feedback (da validação ou da chefia), reescreva o despacho corrigindo o que foi apontado. "
+            "Responda só com o texto do despacho, em português, em um parágrafo."
+        ),
+        model_settings=CONFIG,
+    )
 
 
 # ------------------------------------------------------------------ ETAPA 6.2: coordenador
@@ -103,4 +169,47 @@ def criar_coordenador(hooks: RunHooks | None = None, tools_extras: list | None =
     #   um texto de erro para o Coordenador, que segue em frente. Com None, o erro interrompe a execução.
     #   tools_extras serve só para o teste do 🆕 B (dar de propósito consultar_remuneracao ao Coordenador).
     #   Referência: aula4/ex03_agente_as_tool.py
-    raise NotImplementedError("ETAPA 6.2: criar_coordenador")
+    return Agent(
+        name="Coordenador",
+        instructions=(
+            "Você é o COORDENADOR da análise de pedidos do RH. Você não analisa sozinho: chama os especialistas "
+            "e junta as respostas deles. "
+            "PASSO 1 - Veja o tipo do pedido e chame os especialistas desta tabela, TODOS os da linha: "
+            "abono -> parecer_normas e parecer_escala. "
+            "ferias com dias vendidos igual a 0 -> parecer_normas e parecer_escala. "
+            "ferias com dias vendidos maior que 0 -> parecer_normas, parecer_escala e parecer_financeiro. "
+            "diaria -> parecer_normas e parecer_financeiro. "
+            "Não chame especialista que não está na linha do tipo. "
+            "PASSO 2 - Ao chamar cada especialista, envie o texto completo do pedido que você recebeu, "
+            "sem resumir: ele só sabe o que você escrever. "
+            "PASSO 3 - Espere a resposta de todos os especialistas que você chamou. "
+            "PASSO 4 - Responda com a consolidação das respostas das tools, neste formato: "
+            "'Regras aplicáveis: <o que o parecer_normas respondeu>. "
+            "Escala: <o que o parecer_escala respondeu>. "
+            "Valores: <o que o parecer_financeiro respondeu, com a conta>.' "
+            "Cada parte deve trazer o conteúdo que o especialista devolveu, com as mesmas datas e os mesmos valores. "
+            "Só escreva 'não consultado' na parte de um especialista que você NÃO chamou. "
+            "Deferir ou indeferir é tarefa do sistema: o seu parecer termina na parte dos valores. "
+            "Responda em português."
+        ),
+
+        tools=[
+            criar_normas().as_tool(
+                tool_name="parecer_normas",
+                tool_description="Quais regras da norma interna (N1 a N10) se aplicam ao pedido e o que significam. "
+                                 "Chame em TODOS os pedidos.",
+                hooks=hooks, failure_error_function=None),
+            criar_escala().as_tool(
+                tool_name="parecer_escala",
+                tool_description="Se a escala da equipe permite o afastamento no período (regra N5) e, havendo "
+                                 "conflito, uma sugestão de outro período. Chame em pedidos de férias e de abono.",
+                hooks=hooks, failure_error_function=None),
+            criar_financeiro().as_tool(
+                tool_name="parecer_financeiro",
+                tool_description="Valor da venda de dias de férias (regra N2) ou das diárias de viagem (regra N7), "
+                                 "com a conta. Chame SÓ em férias com dias vendidos maior que 0 ou em diária.",
+                hooks=hooks, failure_error_function=None),
+            *(tools_extras or []),
+        ],
+        model_settings=CONFIG,
+    )

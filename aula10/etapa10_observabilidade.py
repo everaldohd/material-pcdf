@@ -20,10 +20,12 @@ import functools
 import json
 import sys
 import time
+import threading
 
 from dados_rh import SAIDAS
 
 ARQUIVO_METRICAS = SAIDAS / "metricas.jsonl"
+_TRAVA = threading.Lock()  # os nós paralelos gravam ao mesmo tempo: um de cada vez no arquivo
 
 
 def medido(nome: str, no):
@@ -43,9 +45,10 @@ def medido(nome: str, no):
             for chave in ("tokens", "fonte_feriados"):
                 if chave in saida:
                     linha[chave] = saida[chave]
-        ARQUIVO_METRICAS.parent.mkdir(exist_ok=True)
-        with open(ARQUIVO_METRICAS, "a", encoding="utf-8") as arquivo:
-            arquivo.write(json.dumps(linha, ensure_ascii=False) + "\n")
+        with _TRAVA:
+            ARQUIVO_METRICAS.parent.mkdir(exist_ok=True)
+            with open(ARQUIVO_METRICAS, "a", encoding="utf-8") as arquivo:
+                arquivo.write(json.dumps(linha, ensure_ascii=False) + "\n")
         return saida
 
     return embrulhado

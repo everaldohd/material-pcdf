@@ -152,7 +152,7 @@ def criar_redator() -> Agent:
             "Se receber um feedback (da validação ou da chefia), reescreva o despacho corrigindo o que foi apontado. "
             "Responda só com o texto do despacho, em português, em um parágrafo."
         ),
-        model_settings=CONFIG,
+        model_settings=ModelSettings(temperature=0, max_tokens=1000),
     )
 
 

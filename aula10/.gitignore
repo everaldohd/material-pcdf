@@ -5,3 +5,4 @@ saidas/*
 # Ficha de entrega (.docx): vai para o professor, nao para o repositorio
 Ficha_de_entrega.docx
 ~$*.docx
+saidas_old/

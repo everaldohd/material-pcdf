@@ -1,23 +1,23 @@
 # Entrega: Assistente de Gestão de Pessoas
 
 **Aluno(s):**
-**Até onde chegou:** (X) Marco mínimo (Etapa 6)  (X) Marco completo (Etapa 9)  ( ) Etapas 10–11
+**Até onde chegou:** (X) Marco mínimo (Etapa 6)  (X) Marco completo (Etapa 9)  (X) Etapas 10–11
 **Opcionais e bônus feitos:** (X) 🆕 A  (X) 🆕 B  ( ) 🆕 C  ( ) Outro: ______
 
 ## Etapa 0: quem verifica cada regra?
 
 | Regra | Tema | Quem verifica (função Python / agente / humano) | Por quê | Onde foi implementada (preencha na Etapa 11) |
 |---|---|---|---|---|
-| N1 | férias | função Python | É comparação de números | |
-| N2 | férias | função Python | É cálculo matemático simples | |
-| N3 | férias | função Python | É apenas uma consulta no calendário | |
-| N4 | prazos | função Python | É cálculo matemático simples | |
-| N5 | escala | função Python | É cálculo matemático simples | |
-| N6 | abono | função Python | Verificações objeticas | |
-| N7 | diária | função Python | É cálculo matemático simples; o agente Financeiro só explica | |
-| N8 | aprovação | humano | É decisão da chefia; o código apenas decide se o pedido precisa da aprovação da chefia e impede autoaprovação | |
-| N9 | saúde | função Python (guardrail) + agente | A regex de CID barra o dado de saúde antes de qualquer agente ler o texto. Quando o servidor pede licença de saúde sem citar CID, é preciso interpretar o texto: o agente reconhece o pedido e orienta a procurar a junta médica. | |
-| N10 | dados | função Python (guardrail de saída) | Regex de CPF e CID no despacho antes de gravar: é determinística e, se errar, erra para o lado seguro. Limitação: informação de saúde sem código não tem padrão e a regex não pega.| |
+| N1 | férias | função Python | É comparação de números | `violacoes_objetivas()` em `etapa06_regras.py` (pronta), chamada no nó `consolidar` do grafo e no `processar()` do fluxo linear |
+| N2 | férias | função Python | É cálculo matemático simples | `violacoes_objetivas()` (limite de 10 dias e saldo), no nó `consolidar`; o valor da venda é calculado pelo agente Financeiro (nó `financeiro`) |
+| N3 | férias | função Python | É apenas uma consulta no calendário | `inicio_permitido()` em `etapa04_ferramentas.py`, usada por `violacoes_objetivas()`; decisão no nó `consolidar` |
+| N4 | prazos | função Python | É cálculo matemático simples | `violacoes_objetivas()` (antecedência em dias corridos ou úteis); nó `consolidar` |
+| N5 | escala | função Python | É cálculo matemático simples | tool `consultar_escala` do MCP (nó `calcular_periodo`) e `violacoes_objetivas()` no `consolidar`; o agente Escala só sugere outro período |
+| N6 | abono | função Python | Verificações objeticas | `violacoes_objetivas()`; nó `consolidar` |
+| N7 | diária | função Python | É cálculo matemático simples; o agente Financeiro só explica | agente Financeiro (`criar_financeiro` em `etapa06_agentes.py`, nó `financeiro`), com as tools `tabela_diarias` e `cotacao_dolar`. Não há função Python para ela: divergiu do que marquei na Etapa 0 |
+| N8 | aprovação | humano | É decisão da chefia; o código apenas decide se o pedido precisa da aprovação da chefia e impede autoaprovação | `precisa_chefia()` em `etapa06_regras.py` e `rotear_validacao`; pausa em `aprovacao_chefia` com `interrupt()`; o server confere a chefia em `registrar_decisao` (`etapa05_mcp_rh.py`) |
+| N9 | saúde | função Python (guardrail) + agente | A regex de CID barra o dado de saúde antes de qualquer agente ler o texto. Quando o servidor pede licença de saúde sem citar CID, é preciso interpretar o texto: o agente reconhece o pedido e orienta a procurar a junta médica. | `encontrar_dado_sensivel()` (regex de CID) no nó `proteger_entrada`; tipo `licenca_saude` do `Pedido` (`etapa02_extracao.py`) desviado por `rotear_extracao` para `pedir_dados` |
+| N10 | dados | função Python (guardrail de saída) | Regex de CPF e CID no despacho antes de gravar: é determinística e, se errar, erra para o lado seguro. Limitação: informação de saúde sem código não tem padrão e a regex não pega.| `problemas_do_despacho()` no nó `validar` e guardrail de saída no nó `registrar` (Etapa 9.4), que não grava despacho com CPF ou CID |
 
 
 ## Etapa 11: os 12 casos
@@ -26,18 +26,23 @@ Compare **caminho e estado**, não o texto do despacho.
 
 | Caso | Caminho percorrido | Resultado (bloqueado / pediu dados / triagem humana / indeferido / pausou na chefia / registrado + protocolo) | Bateu com o esperado? |
 |---|---|---|---|
-| C1_abono_simples | | | |
-| C2_ferias_com_venda | | | |
-| C3_dado_de_saude | | | |
-| C4_fora_do_escopo | | | |
-| C5_sem_matricula | | | |
-| C6_conflito_de_escala | | | |
-| C7_autoaprovacao | | | |
-| C8_idempotencia | | | |
-| C9_divergencia | | | |
-| C10_zona_cinzenta | | | |
-| C11_diaria_exterior | | | |
-| C12_inicio_proibido | | | |
+| C1_abono_simples | `receber -> proteger_entrada -> extrair -> identificar_servidor -> calcular_periodo -> escala -> financeiro -> normas -> consolidar -> redigir_despacho -> validar -> registrar` | registrado (deferido, sem chefia), protocolo `ae788d33` | sim |
+| C2_ferias_com_venda | `receber -> proteger_entrada -> extrair -> identificar_servidor -> calcular_periodo -> escala -> financeiro -> normas -> consolidar -> redigir_despacho -> validar`, pausou em `aprovacao_chefia`; com `sim 1010`: `-> aprovacao_chefia -> registrar` | pausou na chefia; depois registrado (deferido pela 1010), protocolo `b7b6f485` | sim |
+| C3_dado_de_saude | `receber -> proteger_entrada -> recusar` | bloqueado (recusado: CPF encontrado pela regex) | sim |
+| C4_fora_do_escopo | `receber -> proteger_entrada -> recusar` | bloqueado (recusado: fora do escopo) | sim |
+| C5_sem_matricula | `receber -> proteger_entrada -> extrair -> pedir_dados` | pediu dados | sim |
+| C6_conflito_de_escala | `receber -> proteger_entrada -> extrair -> identificar_servidor -> calcular_periodo -> escala -> financeiro -> normas -> consolidar -> redigir_despacho -> validar -> registrar` | indeferido (N5) e registrado, protocolo `6f1b47d7` | sim |
+| C7_autoaprovacao | `receber -> proteger_entrada -> recusar` | bloqueado (recusado: fora do escopo / manipulação) | sim |
+| C8_idempotencia | igual ao C1: `receber -> proteger_entrada -> extrair -> identificar_servidor -> calcular_periodo -> escala -> financeiro -> normas -> consolidar -> redigir_despacho -> validar -> registrar` | duplicado, protocolo `ae788d33` (o mesmo do C1) | sim |
+| C9_divergencia | `receber -> proteger_entrada -> extrair -> pedir_dados` | pediu dados (pedido vago, sem datas exatas) | sim |
+| C10_zona_cinzenta | `receber -> proteger_entrada -> extrair -> pedir_dados` | pediu dados (passou no guardrail; sem data exata) | sim |
+| C11_diaria_exterior | `receber -> proteger_entrada -> extrair -> identificar_servidor -> calcular_periodo -> escala -> financeiro -> normas -> consolidar -> redigir_despacho -> validar`, pausou em `aprovacao_chefia`; com `sim 1011`: `-> aprovacao_chefia -> registrar` | pausou na chefia; depois registrado (deferido pela 1011), protocolo `ec67dba1` | sim |
+| C12_inicio_proibido | `receber -> proteger_entrada -> extrair -> identificar_servidor -> calcular_periodo -> escala -> financeiro -> normas -> consolidar -> redigir_despacho -> validar -> registrar` | indeferido (N3) e registrado, protocolo `7c458e62` | sim |
+
+- Os 12 casos bateram com a referência do `PASSO_A_PASSO.md` em caminho, resultado e protocolo, partindo de `saidas/` vazia.
+- C9 e C10 (dependem do LLM): os dois terminaram em `pedir_dados`. No C9 o extrator não inventou datas; sem o 🆕 A ligado no grafo, o desvio foi por falta de datas, não por divergência de votos. No C10 a nota de escopo ficou abaixo do `LIMIAR`, o pedido passou no guardrail e parou por não ter data exata; sem o 🆕 C não há triagem humana.
+- Na primeira tentativa do `--todos`, o Redator passou dos 90 s no C2 (`TempoEsgotado`) e o lote inteiro abortou. O limite de tempo evitou o travamento, mas nada trata a falha de um caso isolado. Pus um teto de tokens na resposta do Redator e rodei de novo, sem repetição do erro.
+- As decisões vieram todas do código e estão certas; os textos dos despachos ainda têm erros do `llama3.1` (no C2, dois valores na mesma frase, R$ 1.250,00 e R$ 3.166,67; no C12, cita uma violação da N1 que não existe).
 
 ## O grafo
 
@@ -155,8 +160,8 @@ graph TD;
 
 ## Observabilidade (C2)
 
-- Onde o tempo foi gasto:
-- Tokens totais: ___
+- Onde o tempo foi gasto: nos três especialistas, `escala` 11,5 s, `normas` 11,2 s e `financeiro` 6,9 s, que rodam em paralelo (o tempo de relógio foi cerca de 31 s, e não os 49,48 s da soma dos nós). O `identificar_servidor` levou 5,1 s sem LLM, porque cada `chamar_mcp` sobe o server como um processo novo; aqui o projeto fica em `/mnt/d`, no WSL, e iniciar o Python pesa mais que o 1 s do roteiro. O `redigir_despacho`, que chama o LLM mas não o MCP, levou só 2,5 s.
+- Tokens totais: 6120 (financeiro 1909, normas 1792, escala 1452, redigir_despacho 967). Estão subestimados: o classificador e o extrator não informam o uso.
 
 ## Opcionais (preencha só os que fez)
 
@@ -167,12 +172,19 @@ graph TD;
 ## Reflexão (até 3 linhas cada)
 
 1. Quem decide o caminho no seu sistema: o LLM, o grafo, as regras ou um humano? Dê um exemplo de cada.
+   Os quatro. O LLM decide o que é interpretação: a nota de escopo (C4 e C7 recusados) e o tipo e as datas na extração. As regras decidem deferir ou indeferir (C6 pela N5, C12 pela N3). O grafo decide o caminho com os roteadores (C5 para `pedir_dados`, C2 para a chefia). O humano decide a aprovação: o C2 só foi gravado depois do `sim` da chefia 1010.
 2. Se o guardrail de entrada falhar, o que ainda impede uma autoaprovação?
+   Duas barreiras em código. As regras objetivas: no C7 com `--sem-guardrail` o pedido foi indeferido pela N4 e gravado como `indeferido`. E o server: `registrar_decisao` compara o aprovador com a chefia do cadastro e nega quando é o próprio servidor (C2 com `sim 1002`: `autoaprovação (N8)`).
 3. Por que o nó da chefia não pode gravar nada antes do `interrupt()`?
+   Porque na retomada o nó roda de novo desde a primeira linha: no C2 o `print` antes do `interrupt()` apareceu 4 vezes para 2 passagens. Uma gravação ali aconteceria em dobro, e antes de a chefia decidir. Por isso quem grava é o nó `registrar`, depois da aprovação.
 4. Qual dado veio do **MCP**, qual de **API externa** e qual de **tool local**? Por que essa divisão?
+   Do MCP: cadastro, escala, normas, tabela de diárias, remuneração e o registro da decisão, que são dados do RH e precisam de controle de acesso e auditoria no server. De API externa: feriados (BrasilAPI) e câmbio (Frankfurter), dados públicos que mudam fora do sistema, com retry e plano B. Local: contas de datas, protocolo, regras objetivas e a regex, que precisam ser determinísticas e não dependem de ninguém.
 5. O que você mudaria para colocar este sistema em produção?
+   Manter o MCP Server no ar, em vez de subi-lo a cada chamada. Usar um modelo mais confiável e validar os valores do despacho: o `llama3.1` gerou dois despachos diferentes para o mesmo C2, um com valor errado. Impedir que o salário chegue ao despacho, tratar a falha de um caso sem derrubar o lote e medir também os tokens do classificador e do extrator.
 6. (Só se fez) 🆕 A: votar triplica o custo da extração. Em que pedidos vale a pena?
+   Em pedidos vagos ou ambíguos, como o C9, em que os três votos discordaram nas datas e a divergência evitou adivinhar. Em pedido claro (C1, C2) os votos saem iguais e o custo triplo não compra nada. E a maioria também erra junta: numa execução, dois votos puseram 1 dia vendido num abono.
 7. (Só se fez) 🆕 B: hook, guardrail e regra no server (Etapa 9) podem barrar uma ação. Qual a diferença de **onde** cada um atua?
+   O guardrail atua na entrada, sobre o texto, antes de qualquer agente. O hook atua dentro da execução do agente, antes de cada tool e de cada chamada ao modelo: barrou o Coordenador antes de a `consultar_remuneracao` rodar. A regra no server atua na ponta, na hora de gravar, e vale para qualquer cliente, mesmo fora do grafo.
 8. (Só se fez) 🆕 C: o que muda quando o humano decide a **entrada** em vez da **saída**? Quem é consultado em cada pausa?
 
 ## De onde veio cada parte
@@ -187,6 +199,7 @@ graph TD;
 | `etapa07_grafo.py` (Etapa 7) | `aula6/desafio2/main.py` (LLM + MCP + API + ciclo, o mais parecido), `aula6/exemplos/06_fluxo_condicional/main.py` (roteadores), `aula7/exemplos/08_paralelismo/main.py` (fan-out/fan-in por lista e reducer) e `aula6/exemplos/08_fluxo_ciclico/main.py` (ciclo com parada) | O fluxo linear da Etapa 6 foi cortado em nós, e cada retorno antecipado virou um roteador. O Coordenador deixou de existir: Normas, Escala e Financeiro são nós chamados pelo grafo com os fatos montados pelo código, o que eliminou os erros de repasse do `llama3.1`. O Financeiro só chama o LLM quando há valor a calcular (diária ou venda de dias), para não consultar salário à toa. Licença de saúde e tipo "outro" vão para `pedir_dados`. O `registrar` devolve `registrado`, `duplicado` ou `negado_pelo_server: motivo`. Liguei as arestas da chefia já no `construir()`; o desvio temporário ficou só no `rotear_validacao`. |
 | `etapa07_grafo.py` (Etapa 8) | `aula7/exemplos/07_aprovacao_revisao/main.py` (rejeição com feedback e limite de tentativas, o mais parecido), `aula7/exemplos/06_human_in_the_loop/main.py` (`interrupt()` e `Command(resume=...)`) e `aula7/exemplos/04_persistencia/main.py` (`SqliteSaver`, `get_state`) | A pergunta à chefia leva um resumo com servidor, pedido, os três pareceres e o despacho. O sinal de aprovação é o `feedback_chefia` vazio; numa rejeição sem motivo gravo um texto padrão, senão o roteador leria como aprovação. Duas rejeições vão para `registrar`, que grava `indeferido_pela_chefia`. O `retomar()` olha primeiro onde a execução parou e responde "nada pausado" se não houver pausa, o que cobre a retomada em dobro. |
 | `etapa05_mcp_rh.py` (Etapa 9.2 e 9.3) e `etapa07_grafo.py` (Etapa 9.4) | `aula5/exemplos/10_seguranca/server_seguro.py` (token, enum fechado e auditoria no server, o mais parecido) e `aula8/exemplos/05_guardrail_saida/1_codigo_pronto/main.py` (conferir a saída antes de entregar) | No server, quatro negativas antes de gravar: token, decisão fora do conjunto válido, autoaprovação e aprovador diferente da chefia do cadastro (só em deferimento de férias e diária). Toda negativa passa por uma função `negar()` que audita com DENY e devolve o erro. A auditoria é JSON Lines, uma linha por tentativa, sem o token e sem o despacho. No grafo, o `registrar` usa a mesma regex da entrada no despacho e devolve `bloqueado_na_saida` sem chamar o MCP. |
+| `etapa10_governanca.py` e `etapa10_observabilidade.py` (Etapa 10) | `aula3/agente_hook2.py` e `aula3/agente_hook3.py` (métodos de `RunHooks`), `aula5/exemplos/11_observabilidade/agente_observavel.py` (ler o que aconteceu numa execução) e `aula8/exemplos/03_observabilidade/1_codigo_pronto/passo1_trace.py` (span por etapa) | O mesmo hook do 🆕 B ganhou o papel de registrar: `on_tool_end` guarda agente, tool, argumentos e resultado truncado (com `[restrito]` no lugar do resultado da `consultar_remuneracao`) e `on_agent_end` guarda os tokens. No grafo, uma função `_rodar_agente` roda cada agente com o hook e devolve os tokens, que o nó repassa numa chave `tokens`. O `medido()` embrulha cada nó, mede o tempo e grava uma linha JSON por nó, sem alterar o que o nó devolve. |
 | | | |
 
 

@@ -8,41 +8,42 @@
 
 | Regra | Tema | Quem verifica (função Python / agente / humano) | Por quê | Onde foi implementada (preencha na Etapa 11) |
 |---|---|---|---|---|
-| N1 | férias | função Python | É comparação de números | `violacoes_objetivas()` em `etapa06_regras.py` (pronta), chamada no nó `consolidar` do grafo e no `processar()` do fluxo linear |
-| N2 | férias | função Python | É cálculo matemático simples | `violacoes_objetivas()` (limite de 10 dias e saldo), no nó `consolidar`; o valor da venda é calculado pelo agente Financeiro (nó `financeiro`) |
-| N3 | férias | função Python | É apenas uma consulta no calendário | `inicio_permitido()` em `etapa04_ferramentas.py`, usada por `violacoes_objetivas()`; decisão no nó `consolidar` |
-| N4 | prazos | função Python | É cálculo matemático simples | `violacoes_objetivas()` (antecedência em dias corridos ou úteis); nó `consolidar` |
-| N5 | escala | função Python | É cálculo matemático simples | tool `consultar_escala` do MCP (nó `calcular_periodo`) e `violacoes_objetivas()` no `consolidar`; o agente Escala só sugere outro período |
-| N6 | abono | função Python | Verificações objeticas | `violacoes_objetivas()`; nó `consolidar` |
-| N7 | diária | função Python | É cálculo matemático simples; o agente Financeiro só explica | agente Financeiro (`criar_financeiro` em `etapa06_agentes.py`, nó `financeiro`), com as tools `tabela_diarias` e `cotacao_dolar`. Não há função Python para ela: divergiu do que marquei na Etapa 0 |
-| N8 | aprovação | humano | É decisão da chefia; o código apenas decide se o pedido precisa da aprovação da chefia e impede autoaprovação | `precisa_chefia()` em `etapa06_regras.py` e `rotear_validacao`; pausa em `aprovacao_chefia` com `interrupt()`; o server confere a chefia em `registrar_decisao` (`etapa05_mcp_rh.py`) |
-| N9 | saúde | função Python (guardrail) + agente | A regex de CID barra o dado de saúde antes de qualquer agente ler o texto. Quando o servidor pede licença de saúde sem citar CID, é preciso interpretar o texto: o agente reconhece o pedido e orienta a procurar a junta médica. | `encontrar_dado_sensivel()` (regex de CID) no nó `proteger_entrada`; tipo `licenca_saude` do `Pedido` (`etapa02_extracao.py`) desviado por `rotear_extracao` para `pedir_dados` |
-| N10 | dados | função Python (guardrail de saída) | Regex de CPF e CID no despacho antes de gravar: é determinística e, se errar, erra para o lado seguro. Limitação: informação de saúde sem código não tem padrão e a regex não pega.| `problemas_do_despacho()` no nó `validar` e guardrail de saída no nó `registrar` (Etapa 9.4), que não grava despacho com CPF ou CID |
+| N1 | férias | função Python | É comparação de números | `violacoes_objetivas()` (`etapa06_regras.py`), no nó `consolidar` |
+| N2 | férias | função Python | É cálculo matemático simples | `violacoes_objetivas()`; o valor da venda é do agente Financeiro |
+| N3 | férias | função Python | É apenas uma consulta no calendário | `inicio_permitido()` (`etapa04_ferramentas.py`), via `violacoes_objetivas()` |
+| N4 | prazos | função Python | É cálculo matemático simples | `violacoes_objetivas()` |
+| N5 | escala | função Python | É cálculo matemático simples | `consultar_escala` (MCP) e `violacoes_objetivas()` |
+| N6 | abono | função Python | Verificações objetivas | `violacoes_objetivas()` |
+| N7 | diária | função Python | É cálculo matemático simples; o agente Financeiro só explica | Agente Financeiro (nó `financeiro`). Não há função Python: divergiu do que marquei |
+| N8 | aprovação | humano | Decisão da chefia; o código só decide se precisa dela e impede autoaprovação | `precisa_chefia()`, `aprovacao_chefia` (`interrupt()`) e `registrar_decisao` no server |
+| N9 | saúde | função Python (guardrail) + agente | A regex de CID barra antes de qualquer agente; sem CID, um agente precisa interpretar o pedido | Regex em `proteger_entrada`; tipo `licenca_saude` desviado por `rotear_extracao` |
+| N10 | dados | função Python (guardrail de saída) | Regex de CPF e CID no despacho antes de gravar; não pega dado de saúde sem código | `problemas_do_despacho()` no `validar` e guardrail de saída no `registrar` |
 
 
 ## Etapa 11: os 12 casos
 
 Compare **caminho e estado**, não o texto do despacho.
 
+"Completo" = `receber -> proteger_entrada -> extrair -> identificar_servidor -> calcular_periodo -> escala -> financeiro -> normas -> consolidar -> redigir_despacho -> validar`.
+
 | Caso | Caminho percorrido | Resultado (bloqueado / pediu dados / triagem humana / indeferido / pausou na chefia / registrado + protocolo) | Bateu com o esperado? |
 |---|---|---|---|
-| C1_abono_simples | `receber -> proteger_entrada -> extrair -> identificar_servidor -> calcular_periodo -> escala -> financeiro -> normas -> consolidar -> redigir_despacho -> validar -> registrar` | registrado (deferido, sem chefia), protocolo `ae788d33` | sim |
-| C2_ferias_com_venda | `receber -> proteger_entrada -> extrair -> identificar_servidor -> calcular_periodo -> escala -> financeiro -> normas -> consolidar -> redigir_despacho -> validar`, pausou em `aprovacao_chefia`; com `sim 1010`: `-> aprovacao_chefia -> registrar` | pausou na chefia; depois registrado (deferido pela 1010), protocolo `b7b6f485` | sim |
-| C3_dado_de_saude | `receber -> proteger_entrada -> recusar` | bloqueado (recusado: CPF encontrado pela regex) | sim |
-| C4_fora_do_escopo | `receber -> proteger_entrada -> recusar` | bloqueado (recusado: fora do escopo) | sim |
+| C1_abono_simples | completo `-> registrar` | registrado (deferido), `ae788d33` | sim |
+| C2_ferias_com_venda | completo, pausa; com `sim 1010`: `-> aprovacao_chefia -> registrar` | pausou na chefia; registrado, `b7b6f485` | sim |
+| C3_dado_de_saude | `receber -> proteger_entrada -> recusar` | bloqueado (CPF) | sim |
+| C4_fora_do_escopo | `receber -> proteger_entrada -> recusar` | bloqueado (fora do escopo) | sim |
 | C5_sem_matricula | `receber -> proteger_entrada -> extrair -> pedir_dados` | pediu dados | sim |
-| C6_conflito_de_escala | `receber -> proteger_entrada -> extrair -> identificar_servidor -> calcular_periodo -> escala -> financeiro -> normas -> consolidar -> redigir_despacho -> validar -> registrar` | indeferido (N5) e registrado, protocolo `6f1b47d7` | sim |
-| C7_autoaprovacao | `receber -> proteger_entrada -> recusar` | bloqueado (recusado: fora do escopo / manipulação) | sim |
-| C8_idempotencia | igual ao C1: `receber -> proteger_entrada -> extrair -> identificar_servidor -> calcular_periodo -> escala -> financeiro -> normas -> consolidar -> redigir_despacho -> validar -> registrar` | duplicado, protocolo `ae788d33` (o mesmo do C1) | sim |
-| C9_divergencia | `receber -> proteger_entrada -> extrair -> pedir_dados` | pediu dados (pedido vago, sem datas exatas) | sim |
-| C10_zona_cinzenta | `receber -> proteger_entrada -> extrair -> pedir_dados` | pediu dados (passou no guardrail; sem data exata) | sim |
-| C11_diaria_exterior | `receber -> proteger_entrada -> extrair -> identificar_servidor -> calcular_periodo -> escala -> financeiro -> normas -> consolidar -> redigir_despacho -> validar`, pausou em `aprovacao_chefia`; com `sim 1011`: `-> aprovacao_chefia -> registrar` | pausou na chefia; depois registrado (deferido pela 1011), protocolo `ec67dba1` | sim |
-| C12_inicio_proibido | `receber -> proteger_entrada -> extrair -> identificar_servidor -> calcular_periodo -> escala -> financeiro -> normas -> consolidar -> redigir_despacho -> validar -> registrar` | indeferido (N3) e registrado, protocolo `7c458e62` | sim |
+| C6_conflito_de_escala | completo `-> registrar` | indeferido (N5), registrado, `6f1b47d7` | sim |
+| C7_autoaprovacao | `receber -> proteger_entrada -> recusar` | bloqueado (manipulação) | sim |
+| C8_idempotencia | completo `-> registrar` | duplicado, `ae788d33` | sim |
+| C9_divergencia | `receber -> proteger_entrada -> extrair -> pedir_dados` | pediu dados | sim |
+| C10_zona_cinzenta | `receber -> proteger_entrada -> extrair -> pedir_dados` | pediu dados | sim |
+| C11_diaria_exterior | completo, pausa; com `sim 1011`: `-> aprovacao_chefia -> registrar` | pausou na chefia; registrado, `ec67dba1` | sim |
+| C12_inicio_proibido | completo `-> registrar` | indeferido (N3), registrado, `7c458e62` | sim |
 
-- Os 12 casos bateram com a referência do `PASSO_A_PASSO.md` em caminho, resultado e protocolo, partindo de `saidas/` vazia.
-- C9 e C10 (dependem do LLM): os dois terminaram em `pedir_dados`. No C9 o extrator não inventou datas; sem o 🆕 A ligado no grafo, o desvio foi por falta de datas, não por divergência de votos. No C10 a nota de escopo ficou abaixo do `LIMIAR`, o pedido passou no guardrail e parou por não ter data exata; sem o 🆕 C não há triagem humana.
-- Na primeira tentativa do `--todos`, o Redator passou dos 90 s no C2 (`TempoEsgotado`) e o lote inteiro abortou. O limite de tempo evitou o travamento, mas nada trata a falha de um caso isolado. Pus um teto de tokens na resposta do Redator e rodei de novo, sem repetição do erro.
-- As decisões vieram todas do código e estão certas; os textos dos despachos ainda têm erros do `llama3.1` (no C2, dois valores na mesma frase, R$ 1.250,00 e R$ 3.166,67; no C12, cita uma violação da N1 que não existe).
+- C9 e C10: o extrator não inventou datas e os dois pararam em `pedir_dados`.
+- Na primeira tentativa do `--todos`, o Redator passou dos 90 s no C2 (`TempoEsgotado`) e o lote abortou. Pus um teto de tokens na resposta dele e não repetiu.
+- As decisões vêm do código e estão certas; os textos dos despachos ainda têm erros do `llama3.1`.
 
 ## O grafo
 
@@ -101,106 +102,98 @@ graph TD;
 
 ## Etapa 4 (pronta): o que eu entendi
 
-- Diferença entre a saída online e a offline: offline, a BrasilAPI e a API de câmbio falham 3 vezes cada (`[retry]`); os feriados vêm do arquivo local em 1,5 s (a soma das esperas) e a cotação fica `None`. Online não há retry: feriados da `brasilapi` em 0,1 s e cotação real (5,0165). As contas de datas e o protocolo são iguais. Notei 14 feriados online contra 13 no arquivo: a API traz a segunda de Carnaval (08/02/2027), que a cópia local não tem.
-- Por que a espera do retry dobra a cada tentativa: porque uma falha costuma ser serviço sobrecarregado ou fora do ar por instantes. Esperar 0,5 s e depois 1 s (backoff exponencial) dá tempo de ele se recuperar e evita que os clientes insistam todos ao mesmo tempo e piorem o problema. Com 3 tentativas, o custo máximo é 1,5 s antes de cair no plano B.
-- Por que o protocolo é um hash dos campos (e não um número sequencial): porque o mesmo pedido (matrícula, tipo e datas) gera sempre o mesmo protocolo: C1 e C8 deram `ae788d33`. Assim o server reconhece um pedido repetido e não grava duas vezes (idempotência). Um número sequencial daria um protocolo novo a cada envio e dependeria de um contador guardado em algum lugar.
-- O que aconteceria sem o cache de feriados: `dias_uteis()` pergunta dia por dia se a data é feriado, então um único pedido faria dezenas de chamadas à BrasilAPI. Ficaria lento, arriscaria bloqueio por excesso de requisições e, com a API fora do ar, cada consulta custaria 1,5 s de tentativas antes de usar o arquivo local.
+- Diferença entre a saída online e a offline: offline as duas APIs falham 3 vezes, os feriados vêm do arquivo local (1,5 s) e a cotação fica `None`; online não há retry e a cotação é real (5,0165). Datas e protocolo são iguais.
+- Por que a espera do retry dobra a cada tentativa: dá tempo de o serviço se recuperar e evita que todos os clientes insistam juntos.
+- Por que o protocolo é um hash dos campos (e não um número sequencial): o mesmo pedido gera sempre o mesmo protocolo (C1 e C8: `ae788d33`), então o server não grava duas vezes.
+- O que aconteceria sem o cache de feriados: `dias_uteis()` consulta dia por dia; um pedido faria dezenas de chamadas à BrasilAPI.
 
 ## Etapa 5 (MCP Server do RH): o que eu vi
 
-- Quantas tools o MCP Inspector listou: 6 (`consultar_servidor`, `consultar_escala`, `consultar_normas`, `tabela_diarias`, `consultar_remuneracao` e `registrar_decisao`). No WSL o comando do roteiro deu `inspector: not found`; funcionou com `npx -y -p @modelcontextprotocol/inspector mcp-inspector python etapa05_mcp_rh.py`.
-- Por que toda tool do server devolve um dict, e não uma lista: uma tool MCP que devolve lista manda cada item como um conteúdo separado, e quem chama não distingue "lista com 1 regra" de "1 dict". Com um dict sempre (ex.: `{"tema": ..., "regras": [...]}`), o `chamar_mcp` lê o primeiro conteúdo como JSON e o formato é o mesmo em todas as tools.
-- O que acontece ao gravar o mesmo protocolo duas vezes: nada é gravado de novo. O server lê os registros antes de gravar e, se o protocolo já existe, devolve sucesso com `"duplicado": true`; a 2ª gravação do `teste001` veio assim e o arquivo ficou com um único registro. O token errado ainda é aceito nesta etapa: isso só muda na Etapa 9.2.
-- O agente com o server (`--agente`, `llama3.1`): "Sim, a equipe Cartório tem alguém de férias entre 12 e 26/07/2027, trata-se do servidor público com matrícula 1006."
+- O MCP Inspector listou 6 tools. No WSL só funcionou com `npx -y -p @modelcontextprotocol/inspector mcp-inspector python etapa05_mcp_rh.py`.
+- Toda tool devolve um dict porque uma lista viraria um conteúdo por item, e quem chama não distinguiria "lista com 1 regra" de "1 dict".
+- Gravar o mesmo protocolo duas vezes: a segunda devolve `"duplicado": true` e nada é gravado de novo.
+- Com `--agente`, o AtendenteRH respondeu que a matrícula 1006 está de férias no período.
 
 ## Etapa 6 (especialistas e fluxo linear, Marco mínimo): o que eu vi
 
 | Caso | Resultado | Protocolo | Valor calculado pelo Financeiro |
 |---|---|---|---|
-| `C1_abono_simples` | registrado (deferido, sem chefia) | `ae788d33` | não consultado: abono não tem valor a calcular |
-| `C2_ferias_com_venda` | registrado (deferido; aprovador `pendente_chefia`) | `b7b6f485` | R$ 3.166,67 (10 x 9500 / 30) |
-| `C6_conflito_de_escala` | registrado (indeferido pela N5) | `6f1b47d7` | sem valor (0 dias vendidos); o Financeiro foi consultado sem necessidade |
-| `C11_diaria_exterior` | registrado (deferido; aprovador `pendente_chefia`) | `ec67dba1` | USD 1.120,00 (3,5 x 320); em reais "a calcular" (cotação indisponível) |
+| `C1_abono_simples` | registrado (deferido) | `ae788d33` | não consultado |
+| `C2_ferias_com_venda` | registrado (deferido) | `b7b6f485` | R$ 3.166,67 |
+| `C6_conflito_de_escala` | registrado (indeferido, N5) | `6f1b47d7` | sem valor |
+| `C11_diaria_exterior` | registrado (deferido) | `ec67dba1` | USD 1.120,00; reais "a calcular" |
 
-- A tabela da Etapa 0 bateu com o `etapa06_regras.py`? Quase: N1 a N6 têm um `if` em `violacoes_objetivas()` e a N8 está em `precisa_chefia()`, como na minha tabela. Sobrou a N7: marquei função Python, mas ela não está no arquivo; quem calcula a diária é o agente Financeiro (no C11, 3,5 x USD 320). N9 e N10 também não estão ali: ficam nos guardrails.
-- Quais especialistas o Coordenador consultou no C1, e por que não todos: Normas e Escala. O Financeiro não foi chamado porque abono não tem valor a calcular. Na primeira versão das instruções o `llama3.1` consultou só o Normas; passou a acertar quando troquei as regras com "se" por uma tabela por tipo de pedido. No C6 ele ainda chamou o Financeiro sem necessidade.
-- Diferença entre `as_tool` e handoff: com `as_tool` o Coordenador chama o especialista, recebe a resposta e continua no controle: pode consultar outros e juntar os pareceres num só. No handoff a conversa é transferida e quem responde no fim é o especialista. Aqui é preciso combinar três pareceres, então `as_tool` é o que serve.
-- Quem decide: no C6 o primeiro parecer do Coordenador terminou com "o pedido de férias é aprovado", e o sistema indeferiu, porque a decisão vem de `violacoes_objetivas()` (N5), não do agente. O agente explica; o código decide.
+- A tabela da Etapa 0 bateu com o `etapa06_regras.py`, menos a N7: não há função para ela, quem calcula é o Financeiro.
+- No C1 o Coordenador consultou Normas e Escala; abono não tem valor, então não chamou o Financeiro.
+- `as_tool`: o Coordenador chama, recebe e continua no controle. Handoff: a conversa é transferida e o especialista responde.
+- No C6 o parecer do agente dizia "aprovado" e o sistema indeferiu: o agente explica, o código decide.
 
 ## Etapa 7 (o grafo): o que eu vi
 
-- C1: `receber -> proteger_entrada -> extrair -> identificar_servidor -> calcular_periodo -> escala -> financeiro -> normas -> consolidar -> redigir_despacho -> validar -> registrar`; resultado `registrado`, protocolo `ae788d33`, despacho de deferimento citando a N6.
-- C6: o mesmo caminho; resultado `registrado`, protocolo `6f1b47d7`, despacho de indeferimento pela N5 com sugestão de datas depois do fim das férias da 1006.
-- C3 e C4 param em `recusar` logo depois de `proteger_entrada`; o C5 vai até `extrair` e termina em `pedir_dados`.
-- Ordem dos ramos: escala, financeiro, normas, nos dois casos. Pode variar porque os três nós saem de `calcular_periodo` e rodam no mesmo passo, em paralelo. O que não varia é os três virem antes de `consolidar`, que aparece uma única vez (fan-in por lista).
-- Experimento do reducer (7.1): fiz `normas` e `escala` devolverem também `violacoes`. Com `Annotated[list[str], operator.add]`, as listas foram somadas: `['teste escala', 'teste normas']`. Com `list[str]`, o grafo parou com `InvalidUpdateError: At key 'violacoes': Can receive only one value per step`. Dois nós do mesmo passo não podem escrever num campo sem reducer.
-- O ciclo `redigir_despacho -> validar` não repetiu: passou na primeira tentativa e o `erro_validacao` ficou vazio. Antes de rodar, vi que a validação exige as palavras "deferido" ou "indeferido" e o Redator começava por "Defiro"; troquei para "Pedido deferido/indeferido" e passei as datas já em DD/MM/AAAA.
+- C1 e C6 percorreram o caminho completo até `registrar` (`ae788d33` deferido, `6f1b47d7` indeferido pela N5).
+- Ordem dos ramos: escala, financeiro, normas. Pode variar porque rodam em paralelo; o que não varia é virem antes de um único `consolidar`.
+- Experimento do reducer: com `Annotated[list[str], operator.add]` as listas somaram (`['teste escala', 'teste normas']`); com `list[str]`, `InvalidUpdateError: Can receive only one value per step`.
+- O ciclo `redigir_despacho -> validar` não repetiu; o `erro_validacao` ficou vazio.
 
 ## Etapa 8 (persistência e aprovação da chefia): o que eu vi
 
-- C2: rodou até `validar` e ficou `PAUSADO em ('aprovacao_chefia',)`, sem passar por `registrar`. O `--pendentes` mostrou o C2 pausado e os outros concluídos.
-- Retomada com `"nao:confirme o valor da venda" 1010`: o caminho ganhou `aprovacao_chefia -> redigir_despacho -> validar` e pausou de novo na chefia.
-- Retomada com `sim 1010`: `... -> aprovacao_chefia -> registrar`, resultado `registrado`, protocolo `b7b6f485`.
-- C11: pausou; com `sim 1011` registrou, protocolo `ec67dba1`; retomar de novo respondeu `nada pausado`.
-- O segundo despacho levou em conta o motivo da chefia: traz a conta da venda, 10 dias x R$ 9.500,00 / 30 = R$ 3.166,67. Efeito colateral: o salário-base, que é dado restrito, foi parar no despacho gravado; a validação só confere CPF e CID, então passou. Falta instruir o Redator a informar só o valor final.
-- O `print` no começo de `aprovacao_chefia` apareceu quatro vezes no C2, para duas passagens pelo nó: uma ao rodar, duas na retomada com "não" e uma na retomada com "sim". A cada retomada o nó é reexecutado do começo, por isso nada pode ser gravado antes do `interrupt()`.
-- O que faz a pausa sobreviver ao fim do processo: o checkpointer `SqliteSaver`, que grava o estado em `saidas/checkpoints.db` a cada passo, identificado pelo `thread_id`. Cada comando foi um processo Python separado.
+- O C2 pausou em `aprovacao_chefia` sem gravar. Com "não", voltou a redigir e pausou de novo; com `sim 1010`, registrou (`b7b6f485`).
+- O C11 registrou com `sim 1011` (`ec67dba1`); retomar de novo respondeu `nada pausado`.
+- O segundo despacho levou em conta o motivo da chefia, mas trouxe o salário-base na conta. Falta instruir o Redator a informar só o valor final.
+- O `print` antes do `interrupt()` apareceu 4 vezes para 2 passagens: a cada retomada o nó roda de novo do começo.
+- A pausa sobrevive ao fim do processo por causa do `SqliteSaver` (`saidas/checkpoints.db`).
 
 ## Etapa 9 (segurança, Marco completo): o que eu vi
 
-- Cliente da Etapa 5, de novo: a última linha passou de `sucesso: true` para `{"sem_token": {"sucesso": false, "erro": "token inválido"}}`.
-- C2 aprovado pelo próprio servidor (`sim 1002`): o grafo foi até `registrar` e o resultado foi `negado_pelo_server: autoaprovação (N8)`.
-- C2 aprovado por outra chefia (`sim 1011`): `negado_pelo_server: aprovador não é a chefia 1010 (N8)`.
-- C7 com `--sem-guardrail`: atravessou o grafo, foi de `validar` direto para `registrar` e ficou gravado como `indeferido` (protocolo `56384306`, aprovador `sistema`). O "eu aprovo" não aprovou nada.
-- Auditoria (`saidas/auditoria.jsonl`), seis linhas: `teste001` ALLOW gravado, ALLOW duplicado e DENY token inválido; `b7b6f485` DENY autoaprovação (N8) por 1002 e DENY aprovador não é a chefia 1010 (N8) por 1011; `56384306` ALLOW gravado. O token e o despacho não aparecem em nenhuma.
-- Por que quem nega é o server, e não o agente: o agente é um LLM e pode ser convencido pelo texto do pedido; o server é código e confere o token e a chefia no cadastro. A regra fica num lugar só, por onde toda gravação passa.
-- Se o guardrail de entrada falhar, o que ainda impede uma autoaprovação: as regras objetivas em Python (no C7, indeferimento pela N4) e o server, que compara o aprovador com a chefia do cadastro e nega quando é o próprio servidor.
-- O que não pode aparecer na auditoria: o token, porque quem lesse o log poderia usá-lo para gravar, e o despacho inteiro, que pode trazer dado pessoal.
-- Um erro do modelo que observei: dois despachos do mesmo C2 saíram diferentes, um com a venda certa (R$ 3.166,67) e outro citando uma violação da N2 que não existe e R$ 1.250,00, ainda assim começando por "Pedido deferido". A validação confere matrícula, data e a palavra "deferido", não o valor; a única barreira para isso é a leitura da chefia antes de aprovar.
+- Token errado: `"erro": "token inválido"`.
+- C2 com `sim 1002`: `negado_pelo_server: autoaprovação (N8)`. Com `sim 1011`: `aprovador não é a chefia 1010 (N8)`.
+- C7 com `--sem-guardrail`: atravessou o grafo e foi gravado como `indeferido`. O "eu aprovo" não aprovou nada.
+- Auditoria: ALLOW e DENY registrados, sem o token e sem o despacho.
+- Quem nega é o server porque um LLM pode ser convencido pelo texto do pedido; o server é código e confere o cadastro.
+- O `llama3.1` gerou dois despachos diferentes para o mesmo C2, um com valor errado. A validação não confere valores.
 
 ## Observabilidade (C2)
 
-- Onde o tempo foi gasto: nos três especialistas, `escala` 11,5 s, `normas` 11,2 s e `financeiro` 6,9 s, que rodam em paralelo (o tempo de relógio foi cerca de 31 s, e não os 49,48 s da soma dos nós). O `identificar_servidor` levou 5,1 s sem LLM, porque cada `chamar_mcp` sobe o server como um processo novo; aqui o projeto fica em `/mnt/d`, no WSL, e iniciar o Python pesa mais que o 1 s do roteiro. O `redigir_despacho`, que chama o LLM mas não o MCP, levou só 2,5 s.
-- Tokens totais: 6120 (financeiro 1909, normas 1792, escala 1452, redigir_despacho 967). Estão subestimados: o classificador e o extrator não informam o uso.
-- Um defeito que a observabilidade revelou: o `conferir.py` completo passou a dar `JSONDecodeError` na 10.2. Os três nós paralelos gravavam no `saidas/metricas.jsonl` ao mesmo tempo e, no disco do Windows acessado pelo WSL, uma linha sobrescrevia a outra, deixando restos (` 0}`) no arquivo. Pus uma trava (`threading.Lock`) em volta da gravação no `medido()`; as linhas das execuções reais estavam íntegras, porque nelas os especialistas terminam com segundos de diferença.
+- Onde o tempo foi gasto: nos três especialistas (`escala` 11,5 s, `normas` 11,2 s, `financeiro` 6,9 s). O `identificar_servidor` levou 5,1 s sem LLM porque cada `chamar_mcp` sobe o server de novo.
+- Tokens totais: 6120 (sem o classificador e o extrator, que não informam o uso).
+- Os nós paralelos gravavam no `metricas.jsonl` ao mesmo tempo e uma linha sobrescrevia a outra; resolvi com uma trava (`threading.Lock`) no `medido()`.
 
 ## Opcionais (preencha só os que fez)
 
 - 🆕 A: votos e decisão do C9: (None..None, 04-01..04-10 vende=5, 03-25..04-03 vende=5), decisão com divergencia=True; tempo em paralelo 5,4 s, em sequência 5,7 s.
-- 🆕 B: saída do `python etapa06_linear.py --governanca`: no teste (a), `[governança] Coordenador -> consultar_remuneracao: BARRADO (fora da lista do Coordenador)` e `barrado: Coordenador não pode usar consultar_remuneracao`; a linha `[tool] consultar_remuneracao(1002) EXECUTOU` não apareceu, ou seja, o hook barrou antes de a tool rodar. No teste (b), C2 com `max_tools=1`: `Coordenador -> parecer_normas: OK (1 de 1)`, depois `parecer_escala` e `parecer_financeiro` BARRADOS e `barrado: orçamento de tools estourado (2 de 1)`. O `llama3.1` pediu os três especialistas no mesmo turno, então o bloqueio veio no segundo especialista, e não dentro do primeiro como no roteiro.
+- 🆕 B: saída do `python etapa06_linear.py --governanca`: (a) `Coordenador -> consultar_remuneracao: BARRADO`, e a tool não executou; (b) C2 com `max_tools=1`: `parecer_normas: OK (1 de 1)`, depois `orçamento de tools estourado (2 de 1)`.
 - 🆕 C: caminho do C10 com a triagem humana (sim e não):
 
 ## Reflexão (até 3 linhas cada)
 
 1. Quem decide o caminho no seu sistema: o LLM, o grafo, as regras ou um humano? Dê um exemplo de cada.
-   Os quatro. O LLM decide o que é interpretação: a nota de escopo (C4 e C7 recusados) e o tipo e as datas na extração. As regras decidem deferir ou indeferir (C6 pela N5, C12 pela N3). O grafo decide o caminho com os roteadores (C5 para `pedir_dados`, C2 para a chefia). O humano decide a aprovação: o C2 só foi gravado depois do `sim` da chefia 1010.
+   LLM: a nota de escopo (C4 recusado). Regras: deferir ou indeferir (C6 pela N5). Grafo: os roteadores (C5 para `pedir_dados`). 
+   Humano: a aprovação (C2 só gravou com o `sim` da 1010).
 2. Se o guardrail de entrada falhar, o que ainda impede uma autoaprovação?
-   Duas barreiras em código. As regras objetivas: no C7 com `--sem-guardrail` o pedido foi indeferido pela N4 e gravado como `indeferido`. E o server: `registrar_decisao` compara o aprovador com a chefia do cadastro e nega quando é o próprio servidor (C2 com `sim 1002`: `autoaprovação (N8)`).
+   As regras objetivas (o C7 sem guardrail saiu indeferido) e o server, que nega quando o aprovador é o próprio servidor.
 3. Por que o nó da chefia não pode gravar nada antes do `interrupt()`?
-   Porque na retomada o nó roda de novo desde a primeira linha: no C2 o `print` antes do `interrupt()` apareceu 4 vezes para 2 passagens. Uma gravação ali aconteceria em dobro, e antes de a chefia decidir. Por isso quem grava é o nó `registrar`, depois da aprovação.
+   Na retomada o nó roda de novo desde o começo; uma gravação ali aconteceria em dobro e antes da decisão da chefia.
 4. Qual dado veio do **MCP**, qual de **API externa** e qual de **tool local**? Por que essa divisão?
-   Do MCP: cadastro, escala, normas, tabela de diárias, remuneração e o registro da decisão, que são dados do RH e precisam de controle de acesso e auditoria no server. De API externa: feriados (BrasilAPI) e câmbio (Frankfurter), dados públicos que mudam fora do sistema, com retry e plano B. Local: contas de datas, protocolo, regras objetivas e a regex, que precisam ser determinísticas e não dependem de ninguém.
+   MCP: dados do RH e o registro, que pedem controle de acesso e auditoria. API externa: feriados e câmbio, dados públicos. Local: datas, protocolo, regras e regex, que precisam ser determinísticos.
 5. O que você mudaria para colocar este sistema em produção?
-   Manter o MCP Server no ar, em vez de subi-lo a cada chamada. Usar um modelo mais confiável e validar os valores do despacho: o `llama3.1` gerou dois despachos diferentes para o mesmo C2, um com valor errado. Impedir que o salário chegue ao despacho, tratar a falha de um caso sem derrubar o lote e medir também os tokens do classificador e do extrator.
+   Manter o MCP Server no ar, usar um modelo mais confiável, validar os valores do despacho, não deixar o salário chegar ao despacho e tratar a falha de um caso sem derrubar o lote.
 6. (Só se fez) 🆕 A: votar triplica o custo da extração. Em que pedidos vale a pena?
-   Em pedidos vagos ou ambíguos, como o C9, em que os três votos discordaram nas datas e a divergência evitou adivinhar. Em pedido claro (C1, C2) os votos saem iguais e o custo triplo não compra nada. E a maioria também erra junta: numa execução, dois votos puseram 1 dia vendido num abono.
+   Em pedidos vagos como o C9, em que a divergência evita adivinhar. Em pedido claro os votos saem iguais.
 7. (Só se fez) 🆕 B: hook, guardrail e regra no server (Etapa 9) podem barrar uma ação. Qual a diferença de **onde** cada um atua?
-   O guardrail atua na entrada, sobre o texto, antes de qualquer agente. O hook atua dentro da execução do agente, antes de cada tool e de cada chamada ao modelo: barrou o Coordenador antes de a `consultar_remuneracao` rodar. A regra no server atua na ponta, na hora de gravar, e vale para qualquer cliente, mesmo fora do grafo.
+   Guardrail: na entrada, sobre o texto. Hook: dentro do agente, antes de cada tool. Server: na hora de gravar, para qualquer cliente.
 8. (Só se fez) 🆕 C: o que muda quando o humano decide a **entrada** em vez da **saída**? Quem é consultado em cada pausa?
 
 ## De onde veio cada parte
 
 | Arquivo / trecho | Exemplo das aulas em que me baseei | O que precisei adaptar |
 |---|---|---|
-| `etapa01_agente.py` | `ex10_function_tool.py` da aula 4 (tool que consulta tabela), `aula1/segundo_agente.py` (agente com tool) e `aula8/exemplos/02_agente_tool/main.py` (laço com duas perguntas) | A tool usa `servidor_publico()` em vez de um dicionário fixo e não devolve o salário. A docstring e as instruções dizem quando usar e quando não usar a tool, porque o exemplo da aula 1 manda usar sempre. O `print` dentro da tool substitui a leitura de `new_items` para mostrar quando ela roda. |
-| `etapa02_extracao.py` | `aula2/agente_output2.py` (modelo Pydantic com Enum e `Field(description=...)`); para o 🆕 A, `aula7/exemplos/08_paralelismo/main.py` (fan-out/fan-in) e `aula3/agente_parada3.py` (`Runner.run` com `asyncio`) | O modelo passou de ocorrência policial para pedido de RH, com campos opcionais que ficam `null` quando o servidor não informa. Por causa do `llama3.1`, usei temperatura zero no extrator, instruções mais explícitas (matrícula, ano, data sem dia exato, diária no exterior) e mantive o `tipo` como primeiro campo, para o modelo decidir o tipo antes de preencher o resto. No 🆕 A, o paralelismo da aula 7 roda tarefas diferentes dentro de um grafo; aqui são três extratores da mesma tarefa em `asyncio.gather`, com instruções diferentes só no tratamento de pedido vago, e a votação pronta decide. |
-| `etapa03_guardrails.py` | `aula2/agente_guardrail.py` (classificador com nota de 0 a 1, `LIMIAR` e `@input_guardrail`) e `exercicios_resolvidos/aula4/ex11_guardrails.py` (regex num guardrail, sem LLM) | O exemplo tem um guardrail só; aqui são dois, e o motivo vai no `output_info` (`dado_sensivel:cpf`, `fora_do_escopo`) para o `main` escolher a mensagem. O classificador mede escopo e tentativa de mudar as regras, não tópico proibido, e ganhou uma faixa média para a zona cinzenta (C10 = 0,50). Por causa do `llama3.1`, usei temperatura zero e precisei corrigir dois falsos positivos (C1 e C2 com 0,80): deixei explícito que a nota não mede clareza, pus um exemplo de abono e disse que vender dias faz parte do pedido de férias. |
-| `etapa05_mcp_rh.py` e `etapa05_cliente_mcp.py` | `aula6/desafio2/mcp_unidades.py` (MCP Server que lê um CSV), `aula3/agente_retry3.py` (idempotência) e `aula5/exemplos/04_agente_mcp/agente.py` (`MCPServerStdio` + `mcp_servers`) | As cinco tools de leitura devolvem as consultas prontas de `dados_rh.py`, sempre como um dict, e o trabalho ficou nas docstrings (o que a tool faz, formato das datas, o que volta). A `registrar_decisao` olha se o protocolo já existe antes de gravar e devolve `duplicado` em vez de erro. No agente, usei `sys.executable` no lugar de `"python"`, para o server rodar no `.venv`, e avisei nas instruções o formato AAAA-MM-DD das datas, por causa do `llama3.1`. |
-| `etapa06_agentes.py` e `etapa06_linear.py` | `aula4/ex03_agente_as_tool.py` (Coordenador com especialistas como tools), `aula7/exemplos/02_agentes_especializados/main.py` (uma responsabilidade por agente), `aula7/agentes.py` (`ModelSettings(temperature=0)`) e `aula6/exemplos/01_fluxo_linear/main.py` (fluxo linear) | Cada especialista recebeu só as suas tools e instruções que dizem também o que ele NÃO faz. Por causa do `llama3.1`, as instruções do Coordenador viraram passos numerados com uma tabela de quem consultar por tipo de pedido e um passo final de consolidação das respostas; antes ele consultava só o Normas ou descartava o que recebia. Corrigi o Escala (contava o próprio pedido ou um feriado como afastamento) e o Financeiro (calculava diária em pedido de férias e chamava a tool sem a matrícula). No `analisar()`, a matrícula e a equipe foram para a primeira frase do texto, porque o Coordenador não as repassava. No `processar()`, a decisão e o aprovador vêm do código (`violacoes_objetivas` e `precisa_chefia`), e as datas chegam ao Redator já em DD/MM/AAAA. |
-| `etapa07_grafo.py` (Etapa 7) | `aula6/desafio2/main.py` (LLM + MCP + API + ciclo, o mais parecido), `aula6/exemplos/06_fluxo_condicional/main.py` (roteadores), `aula7/exemplos/08_paralelismo/main.py` (fan-out/fan-in por lista e reducer) e `aula6/exemplos/08_fluxo_ciclico/main.py` (ciclo com parada) | O fluxo linear da Etapa 6 foi cortado em nós, e cada retorno antecipado virou um roteador. O Coordenador deixou de existir: Normas, Escala e Financeiro são nós chamados pelo grafo com os fatos montados pelo código, o que eliminou os erros de repasse do `llama3.1`. O Financeiro só chama o LLM quando há valor a calcular (diária ou venda de dias), para não consultar salário à toa. Licença de saúde e tipo "outro" vão para `pedir_dados`. O `registrar` devolve `registrado`, `duplicado` ou `negado_pelo_server: motivo`. Liguei as arestas da chefia já no `construir()`; o desvio temporário ficou só no `rotear_validacao`. |
-| `etapa07_grafo.py` (Etapa 8) | `aula7/exemplos/07_aprovacao_revisao/main.py` (rejeição com feedback e limite de tentativas, o mais parecido), `aula7/exemplos/06_human_in_the_loop/main.py` (`interrupt()` e `Command(resume=...)`) e `aula7/exemplos/04_persistencia/main.py` (`SqliteSaver`, `get_state`) | A pergunta à chefia leva um resumo com servidor, pedido, os três pareceres e o despacho. O sinal de aprovação é o `feedback_chefia` vazio; numa rejeição sem motivo gravo um texto padrão, senão o roteador leria como aprovação. Duas rejeições vão para `registrar`, que grava `indeferido_pela_chefia`. O `retomar()` olha primeiro onde a execução parou e responde "nada pausado" se não houver pausa, o que cobre a retomada em dobro. |
-| `etapa05_mcp_rh.py` (Etapa 9.2 e 9.3) e `etapa07_grafo.py` (Etapa 9.4) | `aula5/exemplos/10_seguranca/server_seguro.py` (token, enum fechado e auditoria no server, o mais parecido) e `aula8/exemplos/05_guardrail_saida/1_codigo_pronto/main.py` (conferir a saída antes de entregar) | No server, quatro negativas antes de gravar: token, decisão fora do conjunto válido, autoaprovação e aprovador diferente da chefia do cadastro (só em deferimento de férias e diária). Toda negativa passa por uma função `negar()` que audita com DENY e devolve o erro. A auditoria é JSON Lines, uma linha por tentativa, sem o token e sem o despacho. No grafo, o `registrar` usa a mesma regex da entrada no despacho e devolve `bloqueado_na_saida` sem chamar o MCP. |
-| `etapa10_governanca.py` e `etapa10_observabilidade.py` (Etapa 10) | `aula3/agente_hook2.py` e `aula3/agente_hook3.py` (métodos de `RunHooks`), `aula5/exemplos/11_observabilidade/agente_observavel.py` (ler o que aconteceu numa execução) e `aula8/exemplos/03_observabilidade/1_codigo_pronto/passo1_trace.py` (span por etapa) | O mesmo hook do 🆕 B ganhou o papel de registrar: `on_tool_end` guarda agente, tool, argumentos e resultado truncado (com `[restrito]` no lugar do resultado da `consultar_remuneracao`) e `on_agent_end` guarda os tokens. No grafo, uma função `_rodar_agente` roda cada agente com o hook e devolve os tokens, que o nó repassa numa chave `tokens`. O `medido()` embrulha cada nó, mede o tempo e grava uma linha JSON por nó, sem alterar o que o nó devolve; a gravação fica dentro de uma trava, porque os nós paralelos escrevem no arquivo ao mesmo tempo. |
+| `etapa01_agente.py` | `aula4/ex10_function_tool.py`, `aula1/segundo_agente.py`, `aula8/exemplos/02_agente_tool` | A tool usa `servidor_publico()` e não devolve salário; docstring e instruções dizem quando usar e quando não usar a tool. |
+| `etapa02_extracao.py` | `aula2/agente_output2.py`; 🆕 A: `aula7/exemplos/08_paralelismo`, `aula3/agente_parada3.py` | Campos opcionais ficam `null`. Para o `llama3.1`: temperatura zero, instruções mais explícitas e `tipo` como primeiro campo. No 🆕 A, três extratores da mesma tarefa em `asyncio.gather`. |
+| `etapa03_guardrails.py` | `aula2/agente_guardrail.py`, `aula4/ex11_guardrails.py` | Dois guardrails, com o motivo no `output_info`. O classificador ganhou uma faixa média (C10 = 0,50) e ajustes para dois falsos positivos (C1 e C2). |
+| `etapa05_mcp_rh.py` e `etapa05_cliente_mcp.py` | `aula6/desafio2/mcp_unidades.py`, `aula3/agente_retry3.py`, `aula5/exemplos/04_agente_mcp` | Tools de leitura devolvem um dict; `registrar_decisao` confere o protocolo antes de gravar; o agente usa `sys.executable` para o server rodar no `.venv`. |
+| `etapa06_agentes.py` e `etapa06_linear.py` | `aula4/ex03_agente_as_tool.py`, `aula7/exemplos/02_agentes_especializados`, `aula6/exemplos/01_fluxo_linear` | Cada especialista só com as suas tools. O Coordenador ganhou passos numerados e uma tabela de quem consultar por tipo de pedido. A decisão vem do código. |
+| `etapa07_grafo.py` (Etapa 7) | `aula6/desafio2/main.py`, `aula7/exemplos/08_paralelismo`, `aula6/exemplos/08_fluxo_ciclico` | O fluxo linear virou nós e roteadores; os especialistas são nós chamados pelo grafo, sem Coordenador. O Financeiro só chama o LLM quando há valor a calcular. |
+| `etapa07_grafo.py` (Etapa 8) | `aula7/exemplos/07_aprovacao_revisao`, `06_human_in_the_loop`, `04_persistencia` | Aprovação sinalizada pelo `feedback_chefia` vazio; duas rejeições gravam `indeferido_pela_chefia`; `retomar()` avisa quando não há nada pausado. |
+| `etapa05_mcp_rh.py` (9.2 e 9.3) e `etapa07_grafo.py` (9.4) | `aula5/exemplos/10_seguranca/server_seguro.py`, `aula8/exemplos/05_guardrail_saida` | Quatro negativas no server antes de gravar, todas auditadas; auditoria em JSON Lines sem token nem despacho; guardrail de saída no `registrar`. |
+| `etapa10_governanca.py` e `etapa10_observabilidade.py` | `aula3/agente_hook2.py`, `aula5/exemplos/11_observabilidade`, `aula8/exemplos/03_observabilidade` | O hook do 🆕 B também registra tools e tokens (salário como `[restrito]`); `medido()` grava uma linha por nó, dentro de uma trava. |
 | | | |
-
-
